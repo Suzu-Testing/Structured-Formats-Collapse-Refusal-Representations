@@ -1,0 +1,10 @@
+format,gap_retention_pct,gap_magnitude,ci_lower,ci_upper,harmful_mean,harmless_mean
+full_tool_call,2.1,1.292,1.6,2.7,3.328,2.036
+json_no_tags,3.1,1.903,2.4,3.9,4.642,2.738
+kv_pairs,14.0,8.5,11.5,16.0,4.212,-4.288
+minimal_bracket,17.6,10.667,14.2,20.7,10.197,-0.47
+prefix_only,38.6,23.376,30.7,46.5,22.562,-0.814
+direct,48.6,29.44,39.6,56.9,24.479,-4.961
+full_system_prompt,1.3,0.79,1.1,1.5,-2.24,-3.03
+system_content_only,23.6,14.267,19.8,27.4,10.233,-4.033
+system_tags_only,2.6,1.604,2.2,3.2,-1.631,-3.236

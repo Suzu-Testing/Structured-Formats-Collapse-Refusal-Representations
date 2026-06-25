@@ -1,0 +1,13 @@
+difficulty,format,gap,retention_pct,auc,accuracy,n_samples
+easy,direct,50.25,100.0,1.0,100.0,10
+easy,json,4.297,8.555,1.0,50.0,10
+easy,tool_call,2.03,4.04,1.0,50.0,10
+easy,system,1.066,2.123,0.9800000000000001,50.0,10
+borderline,direct,3.25,6.47,0.58,50.0,10
+borderline,json,-0.11523,-0.2292,0.4600000000000001,50.0,10
+borderline,tool_call,-0.2417,-0.481,0.36,50.0,10
+borderline,system,0.2031,0.4043,0.62,50.0,10
+adversarial_harmless,direct,4.42,8.805,0.64,60.0,10
+adversarial_harmless,json,1.719,3.422,0.8500000000000001,50.0,10
+adversarial_harmless,tool_call,0.4858,0.967,0.79,50.0,10
+adversarial_harmless,system,0.832,1.655,0.91,50.0,10

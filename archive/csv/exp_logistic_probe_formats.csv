@@ -1,0 +1,7 @@
+format,overall_accuracy,harmful_detected,harmless_correct,false_negative_rate,mean_prob_harmful,mean_prob_harmless,prob_gap
+direct,98.3,96.7,100.0,3.3,0.918,0.028,0.89
+tool_call,50.0,100.0,0.0,0.0,0.644,0.557,0.087
+json,80.0,60.0,100.0,40.0,0.555,0.112,0.443
+system_prompt,50.0,0.0,100.0,100.0,0.059,0.046,0.013
+mcp_jsonrpc,75.0,50.0,100.0,50.0,0.528,0.23,0.298
+yaml,50.0,0.0,100.0,100.0,0.043,0.01,0.032

@@ -1,0 +1,11 @@
+format,category,gap,retention_pct,auc
+direct,standard,47.1,100.0,1.0
+json,standard,4.023,8.55,1.0
+tool_call,standard,1.488,3.162,0.9911111111111112
+system,standard,1.488,3.162,0.9422222222222222
+unicode_box,bizarre,13.95,29.64,1.0
+hash_pipe,bizarre,10.78,22.89,1.0
+cuneiform,bizarre,9.016,19.14,1.0
+emoji_delim,bizarre,16.52,35.06,1.0
+hex_noise,bizarre,8.24,17.5,1.0
+triple_bang,bizarre,12.945,27.48,1.0

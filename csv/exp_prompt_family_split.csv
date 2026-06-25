@@ -1,0 +1,9 @@
+split,format,gap,retention_pct,auc
+train_CWD,direct,25.5,54.16,1.0
+train_CWD,json,2.902,6.16,0.9500000000000001
+train_CWD,tool_call,1.078,2.29,0.9199999999999999
+train_CWD,system,0.9707,2.06,0.91
+train_FH,direct,22.05,40.5,0.928888888888889
+train_FH,json,2.371,4.355,0.9066666666666667
+train_FH,tool_call,0.959,1.761,0.8555555555555556
+train_FH,system,0.8984,1.651,0.8666666666666667

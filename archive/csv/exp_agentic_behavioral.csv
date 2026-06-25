@@ -1,0 +1,8 @@
+format,compliance_rate,n_complied,n_total
+direct,0.0,0,10
+generic_json,40.0,4,10
+qwen_tool_call,20.0,2,10
+qwen_tool_response,20.0,2,10
+system_prompt,10.0,1,10
+mcp_jsonrpc,0.0,0,10
+agent_scratchpad,0.0,0,10

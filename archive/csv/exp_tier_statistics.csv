@@ -1,0 +1,5 @@
+comparison,tier1_mean,tier2_mean,mann_whitney_U,p_value,cohens_d,significant
+A_natural vs B_generic_structured,48.6,11.2,0.0,1.0,,False
+B_generic_structured vs C_native_agentic,11.2,10.3,19.0,0.5734,0.11,False
+C_native_agentic vs D_trust_annotated,10.3,22.4,3.5,0.0235,-1.38,True
+A_natural vs C_native_agentic,48.6,10.3,0.0,1.0,,False

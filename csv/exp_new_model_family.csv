@@ -1,0 +1,5 @@
+model,format,gap,retention_pct,auc
+phi-2,direct,49.22,100.0,1.0
+phi-2,json,4.4,8.94,0.995
+phi-2,tool_call,2.773,5.633,1.0
+phi-2,system,21.05,42.78,1.0

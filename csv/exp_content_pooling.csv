@@ -1,0 +1,17 @@
+format,pooling,accuracy
+direct,last,100.0
+direct,first,57.49999999999999
+direct,mean,100.0
+direct,content,95.0
+json,last,72.5
+json,first,50.0
+json,mean,97.5
+json,content,95.0
+tool_call,last,90.0
+tool_call,first,50.0
+tool_call,mean,90.0
+tool_call,content,50.0
+system,last,50.0
+system,first,50.0
+system,mean,100.0
+system,content,85.0

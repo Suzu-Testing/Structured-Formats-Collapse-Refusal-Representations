@@ -1,0 +1,5 @@
+category,mean_proj,std_proj
+harmful_direct,43.245,8.228
+harmless_direct,-17.317,9.296
+legitimate_tool_calls,1.629,0.79
+harmful_in_tool_format,4.048,0.594

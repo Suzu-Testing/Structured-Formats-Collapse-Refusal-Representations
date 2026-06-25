@@ -1,0 +1,13 @@
+format,alpha_restore,compliance_pct,n_complied,n_refused,n_total
+direct,0,0.0,0,10,10
+direct,1,0.0,0,10,10
+direct,2,70.0,7,3,10
+direct,3,0.0,0,10,10
+json,0,40.0,4,6,10
+json,1,0.0,0,10,10
+json,2,80.0,8,2,10
+json,3,0.0,0,10,10
+tool_call,0,20.0,2,8,10
+tool_call,1,0.0,0,10,10
+tool_call,2,70.0,7,3,10
+tool_call,3,0.0,0,10,10

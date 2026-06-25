@@ -1,0 +1,12 @@
+format,seen,accuracy,auc,n_test
+json,True,1.0,1.0,10
+xml,True,0.9,1.0,10
+yaml,True,1.0,1.0,10
+tool_call,True,0.9,1.0,10
+system,True,1.0,1.0,10
+hcl,False,0.5,1.0,40
+dockerfile,False,0.5,1.0,40
+icalendar,False,0.5,0.935,40
+toml,False,0.6,1.0,40
+graphql,False,0.525,1.0,40
+direct,True,0.95,1.0,40

@@ -1,0 +1,20 @@
+{
+  "ablation_direct": 100.0,
+  "ablation_monotonic": false,
+  "ablation_tool_call": 4.42256754370475,
+  "calibration_direct": 100.0,
+  "calibration_json": 57.49999999999999,
+  "calibration_system": 50.0,
+  "calibration_tool_call": 50.0,
+  "patching_layer_0": 51.69379620896339,
+  "patching_layer_12": 73.2302917820306,
+  "patching_layer_18": 85.64395898621719,
+  "patching_layer_24": 94.7570511455259,
+  "patching_layer_26": 98.76836948915326,
+  "patching_layer_6": 62.242979280129006,
+  "probe_cv_accuracy": 100.0,
+  "retention_direct": 100.0,
+  "retention_json": 15.794349008917532,
+  "retention_system": 2.4812693928003835,
+  "retention_tool_call": 4.42256754370475
+}

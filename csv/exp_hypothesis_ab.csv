@@ -1,0 +1,56 @@
+classifier,format,seen,accuracy,auc
+Logistic (linear),direct,True,0.85,0.985
+Logistic (linear),json,True,1.0,1.0
+Logistic (linear),xml,True,1.0,1.0
+Logistic (linear),yaml,True,1.0,1.0
+Logistic (linear),tool_call,True,0.9,1.0
+Logistic (linear),system,True,1.0,1.0
+Logistic (linear),hcl,False,0.5,1.0
+Logistic (linear),dockerfile,False,0.5,1.0
+Logistic (linear),icalendar,False,0.5,0.9425
+Logistic (linear),toml,False,0.575,1.0
+Logistic (linear),graphql,False,0.55,1.0
+MLP-small (64),direct,True,0.85,0.995
+MLP-small (64),json,True,1.0,1.0
+MLP-small (64),xml,True,1.0,1.0
+MLP-small (64),yaml,True,1.0,1.0
+MLP-small (64),tool_call,True,0.9,1.0
+MLP-small (64),system,True,1.0,1.0
+MLP-small (64),hcl,False,0.5,0.9824999999999999
+MLP-small (64),dockerfile,False,0.975,1.0
+MLP-small (64),icalendar,False,0.7,0.8474999999999999
+MLP-small (64),toml,False,0.775,1.0
+MLP-small (64),graphql,False,0.5,1.0
+"MLP-medium (128,64)",direct,True,0.925,1.0
+"MLP-medium (128,64)",json,True,1.0,1.0
+"MLP-medium (128,64)",xml,True,1.0,1.0
+"MLP-medium (128,64)",yaml,True,1.0,1.0
+"MLP-medium (128,64)",tool_call,True,0.9,1.0
+"MLP-medium (128,64)",system,True,1.0,1.0
+"MLP-medium (128,64)",hcl,False,0.5,0.9924999999999999
+"MLP-medium (128,64)",dockerfile,False,0.7,1.0
+"MLP-medium (128,64)",icalendar,False,0.5,0.9550000000000001
+"MLP-medium (128,64)",toml,False,0.5,1.0
+"MLP-medium (128,64)",graphql,False,0.5,1.0
+"MLP-large (256,128,64)",direct,True,0.95,1.0
+"MLP-large (256,128,64)",json,True,1.0,1.0
+"MLP-large (256,128,64)",xml,True,1.0,1.0
+"MLP-large (256,128,64)",yaml,True,1.0,1.0
+"MLP-large (256,128,64)",tool_call,True,1.0,1.0
+"MLP-large (256,128,64)",system,True,1.0,1.0
+"MLP-large (256,128,64)",hcl,False,0.5,1.0
+"MLP-large (256,128,64)",dockerfile,False,0.975,1.0
+"MLP-large (256,128,64)",icalendar,False,0.5,0.8075000000000001
+"MLP-large (256,128,64)",toml,False,0.5,1.0
+"MLP-large (256,128,64)",graphql,False,0.5,1.0
+RBF-SVM,direct,True,0.525,1.0
+RBF-SVM,json,True,1.0,1.0
+RBF-SVM,xml,True,1.0,1.0
+RBF-SVM,yaml,True,1.0,1.0
+RBF-SVM,tool_call,True,0.9,1.0
+RBF-SVM,system,True,1.0,1.0
+RBF-SVM,hcl,False,0.5,0.9375
+RBF-SVM,dockerfile,False,0.5,1.0
+RBF-SVM,icalendar,False,0.5,0.8875
+RBF-SVM,toml,False,0.5,1.0
+RBF-SVM,graphql,False,0.5,1.0
