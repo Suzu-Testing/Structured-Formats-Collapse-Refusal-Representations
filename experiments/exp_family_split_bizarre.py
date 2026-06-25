@@ -116,10 +116,10 @@ def main():
     
     model_name = 'Qwen/Qwen2.5-1.5B-Instruct'
     print(f'\nLoading: {model_name}', flush=True)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, local_files_only=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         model_name, trust_remote_code=True, torch_dtype=torch.float16,
-        device_map='auto', local_files_only=True)
+        device_map='auto')
     
     # Determine best layer
     test_h = get_hidden_states(model, tokenizer, HARM_FAMILIES['cyber'][:2], best_layer=-1)

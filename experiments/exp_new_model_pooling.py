@@ -188,10 +188,10 @@ def main():
     # Use Qwen for this since we know it works
     model_name = 'Qwen/Qwen2.5-1.5B-Instruct'
     print(f'\n  Loading: {model_name}', flush=True)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, local_files_only=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         model_name, trust_remote_code=True, torch_dtype=torch.float16,
-        device_map='auto', local_files_only=True)
+        device_map='auto')
     
     # Collect multi-position representations for all formats
     pooling_results = []

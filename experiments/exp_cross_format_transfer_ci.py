@@ -68,10 +68,10 @@ def main():
     
     model_name = 'Qwen/Qwen2.5-1.5B-Instruct'
     print(f'\nLoading: {model_name}', flush=True)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, local_files_only=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         model_name, trust_remote_code=True, torch_dtype=torch.float16,
-        device_map='auto', local_files_only=True)
+        device_map='auto')
     
     # Determine best layer
     outputs = model(**tokenizer(HARMFUL_PROMPTS[0], return_tensors='pt', truncation=True,

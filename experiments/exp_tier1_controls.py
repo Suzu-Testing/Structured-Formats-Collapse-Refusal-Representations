@@ -150,11 +150,10 @@ def main():
     model_name = 'Qwen/Qwen2.5-1.5B-Instruct'
     print(f'\nLoading: {model_name}', flush=True)
     tokenizer = AutoTokenizer.from_pretrained(
-        model_name, trust_remote_code=True, local_files_only=True)
+        model_name, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         model_name, trust_remote_code=True,
         torch_dtype=torch.float16, device_map='auto',
-        local_files_only=True,
     )
     print(f'  Loaded. Params: {sum(p.numel() for p in model.parameters())/1e6:.0f}M', flush=True)
 
