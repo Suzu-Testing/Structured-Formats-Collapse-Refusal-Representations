@@ -66,11 +66,11 @@ MODELS = [
     ('Qwen2.5-1.5B', 'Qwen/Qwen2.5-1.5B-Instruct', False),
     ('TinyLlama-1.1B', 'TinyLlama/TinyLlama-1.1B-Chat-v1.0', False),
     ('SmolLM2-1.7B', 'HuggingFaceTB/SmolLM2-1.7B-Instruct', False),
-    ('Qwen2.5-3B', 'Qwen/Qwen2.5-3B-Instruct', False),  # FP16
+    ('Qwen2.5-3B', 'Qwen/Qwen2.5-3B-Instruct', True),  # larger model, use n=30
 ]
 
 
-def load_model(model_name, quantize=False):
+def load_model(model_name, is_large=False):
     """Load model in FP16."""
     tokenizer = AutoTokenizer.from_pretrained(
         model_name, trust_remote_code=True, local_files_only=True)
@@ -198,14 +198,14 @@ def main():
     all_ablation = []
     all_layers = []
 
-    for model_label, model_name, quantize in MODELS:
+    for model_label, model_name, is_large in MODELS:
         print(f'\n{"="*70}', flush=True)
         print(f'MODEL: {model_label} ({model_name})', flush=True)
         print(f'{"="*70}', flush=True)
 
         try:
-            model, tokenizer = load_model(model_name, quantize)
-            n = 30 if quantize else 50  # fewer for 3B to save time
+            model, tokenizer = load_model(model_name, is_large)
+            n = 30 if is_large else 50
 
             ablation, layers = run_ablation_for_model(model, tokenizer, model_label, n_prompts=n)
             all_ablation.extend(ablation)
