@@ -23,4 +23,4 @@ For reproducible results, use the scripts listed in the root `README.md`, which 
 
 ## Frontier behavioral evaluations
 
-GPT-4o, Claude Sonnet 4.6, and Gemini 2.5 Flash behavioral results reported in the paper were collected via proprietary APIs and are **not included** in this repository (no API keys, no frozen frontier prompt set). Open-weight mechanistic results are fully reproducible via `reproduce.py` and the experiment suite.
+GPT-4o, Claude Sonnet 4, and Gemini 2.5 Flash behavioral results reported in the paper were collected via proprietary APIs. The evaluation script is in `frontier/eval_frontier.py` but raw API response logs are not redistributed due to terms of service. Open-weight mechanistic results are fully reproducible via `reproduce.py` and the experiment suite.

@@ -1,6 +1,8 @@
 # Format-Dependent Calibration Shifts in Refusal Representations of Instruction-Tuned Language Models
 
-**IEEE CARS 2026 Submission**
+**IEEE CARS 2026**
+
+> Paper: *available upon publication* <!-- TODO: replace with arXiv or DOI link -->
 
 ## Summary
 
@@ -19,7 +21,6 @@ Key results:
 ## Repository Structure
 
 ```
-submissions/ieee-cars-2026/       Final IEEE CARS 2026 LaTeX source
 experiments/                       All experiment scripts
   prompt_dataset.py               Full 90+90 prompt set (6 categories)
   exp_safety_invariance.py        Core gap measurement + shared utilities
@@ -33,7 +34,7 @@ csv/                              Output data and results
 frontier/                         Frontier model evaluation
   eval_frontier.py                API evaluation script (GPT-4o, Gemini, Claude)
   README.md                       Reproduction instructions (requires API keys)
-reproduce.py                      Reproduction pipeline (~15 min on RTX 3080)
+reproduce.py                      Reproduction pipeline (~1-2 min on RTX 3080)
 requirements.txt                  Dependencies
 ```
 
@@ -44,7 +45,7 @@ pip install -r requirements.txt
 python reproduce.py
 ```
 
-This reproduces the core open-weight results (gap measurement, ablation, patching, calibration, cross-model) in approximately 15 minutes on an RTX 3080.
+This reproduces the core open-weight results (gap measurement, ablation, patching, calibration, cross-model) in approximately 1-2 minutes on an RTX 3080.
 
 The script:
 1. Selects the best layer via AUC maximization (direction from extraction set, AUC on validation set)
@@ -58,6 +59,7 @@ Pass/fail checks are printed against expected ranges from the paper.
 
 ## What Is NOT Included
 
+- **Paper LaTeX source** is not distributed here. The paper will be available through IEEE Xplore upon publication.
 - **Frontier API evaluation** requires API keys for OpenAI, Google, and Anthropic. The scripts that generated frontier results are in `frontier/` but raw API response logs are not redistributed due to terms of service. Results are reported in the paper with exact statistical tests (McNemar's, Bonferroni-corrected).
 - **Full multi-seed fine-tuning** (5 seeds x 2 conditions x 5 formats = 50 evaluations) takes ~8 GPU-hours. Raw results are in `csv/exp_multiseed_ft.csv`; the training script is `experiments/exp_format_adversarial_ft.py`. Seeds: 42, 123, 456, 789, 1024. Model: SmolLM2-135M-Instruct.
 
@@ -103,17 +105,18 @@ tokenizer(prompt, return_tensors='pt', truncation=True, max_length=128)
 
 ## Layer Selection
 
-The paper reports layer 14 for Qwen2.5-1.5B-Instruct, selected by AUC maximization on the extraction set. The `reproduce.py` script selects the layer automatically using the extraction-set direction evaluated against validation-set AUC. The exact layer may vary slightly depending on hardware, driver versions, and float16 precision (typically layers 14-26 show the strongest effect). The older pre-release code used a hardcoded layer 27. All mid-to-late layers exhibit the format-dependent collapse; the paper reports results at the layer yielding peak extraction-set AUC.
+The paper reports layer 14 for Qwen2.5-1.5B-Instruct, selected by AUC maximization on the extraction set. The `reproduce.py` script selects the layer automatically using the extraction-set direction evaluated against validation-set AUC. The exact layer may vary slightly depending on hardware, driver versions, and float16 precision (typically layers 14-26 show the strongest effect). All mid-to-late layers exhibit the format-dependent collapse; the paper reports results at the layer yielding peak extraction-set AUC.
 
 ## Hardware
 
-All open-weight experiments run on a single GPU with 10GB+ VRAM (tested on RTX 3080). Reproduction takes approximately 15 minutes. The full experiment suite (all models, all experiments) takes approximately 6 GPU-hours.
+All open-weight experiments run on a single GPU with 10GB+ VRAM (tested on RTX 3080). The full experiment suite (all models, all experiments) takes approximately 6 GPU-hours.
 
 ## Citation
 
 ```bibtex
 @inproceedings{krell2026format,
-  title={Format-Dependent Calibration Shifts in Refusal Representations of Instruction-Tuned Language Models},
+  title={Format-Dependent Calibration Shifts in Refusal Representations
+         of Instruction-Tuned Language Models},
   author={Krell, Jacob},
   booktitle={IEEE Conference on Assured and Reliable Systems (CARS)},
   year={2026}
