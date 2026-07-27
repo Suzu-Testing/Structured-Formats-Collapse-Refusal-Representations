@@ -1,0 +1,190 @@
+{
+  "best_layer": 26,
+  "best_layer_auc": 0.9824999999999999,
+  "direct_threshold": 2.875,
+  "direct_gap": 30.9375,
+  "table1": {
+    "direct": {
+      "retention": 100.0,
+      "gap": 30.9375,
+      "auc": 0.9944000000000001
+    },
+    "json": {
+      "retention": 17.265625,
+      "ci_lo": 14.6484375,
+      "ci_hi": 20.0,
+      "gap": 5.33984375,
+      "auc": 0.9884
+    },
+    "xml": {
+      "retention": 37.4375,
+      "ci_lo": 33.5,
+      "ci_hi": 41.3125,
+      "gap": 11.578125,
+      "auc": 0.9975999999999999
+    },
+    "yaml": {
+      "retention": 29.15625,
+      "ci_lo": 25.640625,
+      "ci_hi": 32.78125,
+      "gap": 9.015625,
+      "auc": 0.9956
+    },
+    "system": {
+      "retention": 3.498046875,
+      "ci_lo": 3.080078125,
+      "ci_hi": 3.927734375,
+      "gap": 1.08203125,
+      "auc": 0.9887999999999999
+    },
+    "tool_call": {
+      "retention": 6.45703125,
+      "ci_lo": 5.6015625,
+      "ci_hi": 7.375,
+      "gap": 1.998046875,
+      "auc": 0.99
+    },
+    "openai_style": {
+      "retention": 45.3125,
+      "ci_lo": 41.40625,
+      "ci_hi": 49.4375,
+      "gap": 14.015625,
+      "auc": 0.9988
+    },
+    "mcp_jsonrpc": {
+      "retention": 8.28125,
+      "ci_lo": 7.0546875,
+      "ci_hi": 9.5625,
+      "gap": 2.5625,
+      "auc": 0.978
+    }
+  },
+  "table2": {
+    "full_tool_call": {
+      "retention": 6.45703125,
+      "ci_lo": 5.6015625,
+      "ci_hi": 7.375
+    },
+    "json_braces": {
+      "retention": 9.1171875,
+      "ci_lo": 7.24609375,
+      "ci_hi": 11.421875
+    },
+    "kv_pairs": {
+      "retention": 83.0,
+      "ci_lo": 71.875,
+      "ci_hi": 95.1875
+    },
+    "brackets": {
+      "retention": 61.96875,
+      "ci_lo": 56.84375,
+      "ci_hi": 67.125
+    },
+    "prefix": {
+      "retention": 94.75,
+      "ci_lo": 84.0625,
+      "ci_hi": 106.0625
+    },
+    "direct": {
+      "retention": 100.0,
+      "ci_lo": 88.75,
+      "ci_hi": 111.8125
+    },
+    "natural_filler": {
+      "retention": 92.8125,
+      "ci_lo": 81.9375,
+      "ci_hi": 104.3125
+    },
+    "tool_format_32": {
+      "retention": 5.2265625,
+      "ci_lo": 4.54296875,
+      "ci_hi": 5.97265625
+    },
+    "real_token": {
+      "retention": 14.78125,
+      "ci_lo": 12.9296875,
+      "ci_hi": 16.6875
+    },
+    "arbitrary_delims": {
+      "retention": 52.25,
+      "ci_lo": 46.5,
+      "ci_hi": 57.625
+    }
+  },
+  "table3": {
+    "direct": {
+      "auc": 0.9944000000000001,
+      "raw_delta": 30.9375,
+      "delta_thr": 0,
+      "acc_at_dir_thr": 94.0
+    },
+    "json": {
+      "auc": 0.9884,
+      "raw_delta": 5.33984375,
+      "delta_thr": -0.931640625,
+      "acc_at_dir_thr": 92.0
+    },
+    "tool_call": {
+      "auc": 0.99,
+      "raw_delta": 1.998046875,
+      "delta_thr": 1.578125,
+      "acc_at_dir_thr": 52.0
+    },
+    "system": {
+      "auc": 0.9887999999999999,
+      "raw_delta": 1.08203125,
+      "delta_thr": 0.271484375,
+      "acc_at_dir_thr": 91.0
+    }
+  },
+  "table4": {
+    "tool_call": {
+      "0": 17.921875,
+      "6": 6.7890625,
+      "12": 65.9375,
+      "18": 93.3125,
+      "24": 112.5,
+      "26": 113.0
+    },
+    "system": {
+      "0": 90.8125,
+      "6": 100.5,
+      "12": 103.8125,
+      "18": 112.1875,
+      "24": 106.25,
+      "26": 108.875
+    }
+  },
+  "table5": {
+    "Qwen2.5-1.5B": {
+      "direct": 100.0,
+      "json": 7.421875,
+      "tool_call": 6.45703125,
+      "system": 3.498046875
+    },
+    "Qwen2.5-3B (4-bit)": {
+      "direct": 100.0,
+      "json": -1,
+      "tool_call": -1,
+      "system": -1
+    },
+    "TinyLlama-1.1B": {
+      "direct": 100.0,
+      "json": 11.734375,
+      "tool_call": 1.9853515625,
+      "system": 37.75
+    },
+    "SmolLM2-1.7B": {
+      "direct": 100.0,
+      "json": 4.01171875,
+      "tool_call": 0.1044921875,
+      "system": 2.005859375
+    },
+    "Phi-2": {
+      "direct": 100.0,
+      "json": 13.609375,
+      "tool_call": 6.82421875,
+      "system": 56.59375
+    }
+  }
+}

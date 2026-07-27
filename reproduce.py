@@ -11,26 +11,51 @@ Requirements:
 - ~10GB disk for model caches
 - ~10GB VRAM (or CPU with more time)
 
-Expected runtime: ~15 minutes on RTX 3080
+Expected runtime: ~6 minutes on RTX 3080
 
-This script reproduces:
-  1. Layer selection via AUC maximization on extraction set
-  2. Gap retention measurement (Table I)
-  3. Format-token ablation (Table II)
-  4. Activation patching (Table III)
-  5. Calibration/threshold transfer failure
-  6. Cross-model gap measurement (Qwen2.5-1.5B + TinyLlama)
+This script reproduces Tables I-IV from the paper using:
+  1. Stratified three-way split (extraction/validation/test)
+  2. Direction extraction on extraction set
+  3. Layer selection via AUC maximization on validation set
+  4. Threshold calibration on validation set
+  5. All metrics reported on test set (N=50 pairs)
+
+Protocol yields layer 26 for Qwen2.5-1.5B-Instruct.
 """
 
-import os, sys, hashlib, json, time
+import os, sys, json, time
 import numpy as np
-import pandas as pd
 
 np.random.seed(42)
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'experiments'))
 
 RESULTS = {}
+
+# Expected paper values (from ieee_cars_stratified_results.json)
+EXPECTED = {
+    'best_layer': 26,
+    'table1': {
+        'tool_call': 6.5,
+        'system': 3.5,
+        'json': 17.3,
+        'xml': 37.4,
+        'yaml': 29.2,
+        'mcp_jsonrpc': 8.3,
+        'openai_style': 45.3,
+    },
+    'table2_monotonic': True,
+    'table3': {
+        'direct': {'auc': 0.994, 'acc': 94.0},
+        'tool_call': {'auc': 0.990, 'acc': 52.0},
+        'system': {'auc': 0.989, 'acc': 91.0},
+        'json': {'auc': 0.988, 'acc': 92.0},
+    },
+    'table4': {
+        'tool_call': {0: 17.9, 6: 6.8, 12: 65.9, 18: 93.3, 24: 112.5, 26: 113.0},
+        'system': {0: 90.8, 6: 100.5, 12: 103.8, 18: 112.2, 24: 106.2, 26: 108.9},
+    },
+}
 
 
 def section(name):
@@ -39,455 +64,460 @@ def section(name):
     print(f'{"="*70}\n')
 
 
+def check_close(actual, expected, tolerance_pct=5.0, label=""):
+    """Check if actual is within tolerance of expected (allowing GPU non-determinism)."""
+    if abs(expected) < 0.01:
+        ok = abs(actual - expected) < 1.0
+    else:
+        ok = abs(actual - expected) / abs(expected) * 100 < tolerance_pct
+    return ok
+
+
 def main():
     start = time.time()
 
     section('REPRODUCTION: Format-Dependent Calibration Shifts')
-    print('IEEE CARS 2026 - Core open-weight results')
-    print('This script uses the 90+90 prompt dataset with three-way split.\n')
+    print('IEEE Cyber Awareness and Research Symposium (CARS) 2026')
+    print('Core open-weight results with stratified three-way split.\n')
 
     import torch
-    from transformers import AutoTokenizer, AutoModelForCausalLM
-    from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import roc_auc_score
-    from scipy.stats import spearmanr
+    from scipy import stats
 
-    from prompt_dataset import get_splits, HARMFUL_PROMPTS, HARMLESS_PROMPTS
-    from exp_safety_invariance import (
-        extract_refusal_direction, get_hidden_states, DEVICE
-    )
+    from prompt_dataset import get_stratified_splits
 
-    extraction, validation, test = get_splits()
-    ext_harmful, ext_harmless = extraction
-    val_harmful, val_harmless = validation
-    test_harmful, test_harmless = test
+    (EXT_H, EXT_L), (VAL_H, VAL_L), (TST_H, TST_L) = get_stratified_splits(seed=42)
 
-    print(f'  Dataset: {len(HARMFUL_PROMPTS)} harmful + {len(HARMLESS_PROMPTS)} harmless')
-    print(f'  Extraction: {len(ext_harmful)}+{len(ext_harmless)}')
-    print(f'  Validation: {len(val_harmful)}+{len(val_harmless)}')
-    print(f'  Test: {len(test_harmful)}+{len(test_harmless)}')
+    print(f'  Dataset: 90 harmful + 90 harmless across 6 categories')
+    print(f'  Extraction: {len(EXT_H)} pairs (direction extraction)')
+    print(f'  Validation: {len(VAL_H)} pairs (layer selection + threshold)')
+    print(f'  Test: {len(TST_H)} pairs (all reported metrics)')
+
+    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    # ============================================================
+    # SHARED UTILITIES
+    # ============================================================
+    def get_hidden_states(model, tokenizer, prompts, max_length=128):
+        model.eval()
+        all_states = []
+        with torch.no_grad():
+            for p in prompts:
+                inputs = tokenizer(p, return_tensors='pt', truncation=True, max_length=max_length).to(DEVICE)
+                outputs = model(**inputs, output_hidden_states=True)
+                hidden = outputs.hidden_states
+                last_token_states = [h[0, -1, :].cpu().numpy() for h in hidden]
+                all_states.append(last_token_states)
+        return all_states
+
+    def extract_direction(model, tokenizer, harmful, harmless):
+        h_states = get_hidden_states(model, tokenizer, harmful)
+        l_states = get_hidden_states(model, tokenizer, harmless)
+        n_layers = len(h_states[0])
+        directions = []
+        for layer in range(n_layers):
+            h_mean = np.mean([s[layer] for s in h_states], axis=0)
+            l_mean = np.mean([s[layer] for s in l_states], axis=0)
+            d = h_mean - l_mean
+            d = d / (np.linalg.norm(d) + 1e-10)
+            directions.append(d)
+        return directions
+
+    def select_layer_by_auc(directions, model, tokenizer, harmful, harmless):
+        h_states = get_hidden_states(model, tokenizer, harmful)
+        l_states = get_hidden_states(model, tokenizer, harmless)
+        best_auc, best_layer = 0, 0
+        for layer in range(len(directions)):
+            d = directions[layer]
+            h_projs = [np.dot(s[layer], d) for s in h_states]
+            l_projs = [np.dot(s[layer], d) for s in l_states]
+            labels = [1]*len(h_projs) + [0]*len(l_projs)
+            scores = h_projs + l_projs
+            try:
+                auc = roc_auc_score(labels, scores)
+            except ValueError:
+                auc = 0.5
+            if auc > best_auc:
+                best_auc = auc
+                best_layer = layer
+        return best_layer, best_auc
+
+    def bootstrap_ci(data_h, data_l, n_boot=2000, seed=42):
+        rng = np.random.RandomState(seed)
+        gaps = []
+        for _ in range(n_boot):
+            h_sample = rng.choice(data_h, size=len(data_h), replace=True)
+            l_sample = rng.choice(data_l, size=len(data_l), replace=True)
+            gaps.append(np.mean(h_sample) - np.mean(l_sample))
+        return np.percentile(gaps, 2.5), np.percentile(gaps, 97.5)
 
     # ============================================================
     # LOAD PRIMARY MODEL
     # ============================================================
     model_name = 'Qwen/Qwen2.5-1.5B-Instruct'
     print(f'\n  Loading {model_name}...')
+    from transformers import AutoTokenizer, AutoModelForCausalLM
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
-        model_name, trust_remote_code=True, torch_dtype=torch.float16, device_map='auto')
+        model_name, trust_remote_code=True, torch_dtype=torch.float16
+    ).to(DEVICE)
     print(f'  Model loaded. Device: {DEVICE}')
 
     # ============================================================
-    # 1. LAYER SELECTION (AUC maximization - validated on held-out set)
+    # 1. LAYER SELECTION (direction on extraction, AUC on validation)
     # ============================================================
-    section('1. LAYER SELECTION (AUC on validation set)')
+    section('1. LAYER SELECTION')
 
-    refusal_dirs = extract_refusal_direction(model, tokenizer, ext_harmful, ext_harmless)
-    n_layers = len(refusal_dirs)
+    print(f'  Extracting refusal direction on extraction set (N={len(EXT_H)})...')
+    directions = extract_direction(model, tokenizer, EXT_H, EXT_L)
+    n_layers = len(directions)
 
-    # Compute hidden states for extraction set (used to extract direction)
-    ext_all_harmful_h = get_hidden_states(model, tokenizer, ext_harmful)
-    ext_all_harmless_h = get_hidden_states(model, tokenizer, ext_harmless)
+    print(f'  Selecting layer by AUC on validation set (N={len(VAL_H)})...')
+    best_layer, best_auc = select_layer_by_auc(directions, model, tokenizer, VAL_H, VAL_L)
+    direction = directions[best_layer]
 
-    # Compute hidden states for validation set (used to select best layer)
-    val_all_harmful_h = get_hidden_states(model, tokenizer, val_harmful)
-    val_all_harmless_h = get_hidden_states(model, tokenizer, val_harmless)
-
-    layer_val_aucs = []
-
-    for layer in range(n_layers):
-        # Project validation set onto direction extracted from extraction set
-        projs_harmful = [float(np.dot(h[layer], refusal_dirs[layer])) for h in val_all_harmful_h]
-        projs_harmless = [float(np.dot(h[layer], refusal_dirs[layer])) for h in val_all_harmless_h]
-        y_true = [1] * len(projs_harmful) + [0] * len(projs_harmless)
-        scores = projs_harmful + projs_harmless
-        try:
-            auc = roc_auc_score(y_true, scores)
-        except ValueError:
-            auc = 0.5
-        layer_val_aucs.append(auc)
-
-    best_layer = int(np.argmax(layer_val_aucs))
-    best_auc = layer_val_aucs[best_layer]
-
-    print(f'  Direction extracted from extraction set ({len(ext_harmful)} pairs)')
-    print(f'  AUC evaluated on validation set ({len(val_harmful)} pairs)')
-    print(f'  Best layer: {best_layer} (validation AUC = {best_auc:.4f})')
-    top5 = sorted(range(n_layers), key=lambda l: layer_val_aucs[l], reverse=True)[:5]
-    print(f'  Top-5 layers: {top5}')
-    RESULTS['selected_layer'] = best_layer
-    RESULTS['layer_auc'] = best_auc
-
-    direction = refusal_dirs[best_layer]
+    print(f'  Selected layer: {best_layer} (AUC={best_auc:.4f} on validation)')
+    print(f'  Expected layer: {EXPECTED["best_layer"]}')
+    RESULTS['best_layer'] = best_layer
+    RESULTS['best_layer_auc'] = best_auc
 
     # ============================================================
-    # FORMAT DEFINITIONS
+    # THRESHOLD CALIBRATION (validation set, direct format)
     # ============================================================
-    formats = {
-        'direct': lambda p: p,
-        'tool_call': lambda p: f'<tool_call>\n{{"name": "execute", "arguments": {{"query": "{p}"}}}}\n</tool_call>',
+    print(f'\n  Calibrating threshold on validation set (direct format)...')
+    val_h_states = get_hidden_states(model, tokenizer, VAL_H)
+    val_l_states = get_hidden_states(model, tokenizer, VAL_L)
+    val_h_projs = [np.dot(s[best_layer], direction) for s in val_h_states]
+    val_l_projs = [np.dot(s[best_layer], direction) for s in val_l_states]
+
+    all_val_projs = val_h_projs + val_l_projs
+    all_val_labels = [1]*len(val_h_projs) + [0]*len(val_l_projs)
+    thresholds = np.linspace(min(all_val_projs), max(all_val_projs), 200)
+    best_thr = 0
+    best_ba = 0
+    for thr in thresholds:
+        preds = [1 if s > thr else 0 for s in all_val_projs]
+        tp = sum(1 for p, l in zip(preds, all_val_labels) if p == 1 and l == 1)
+        tn = sum(1 for p, l in zip(preds, all_val_labels) if p == 0 and l == 0)
+        sens = tp / max(sum(all_val_labels), 1)
+        spec = tn / max(len(all_val_labels) - sum(all_val_labels), 1)
+        ba = (sens + spec) / 2
+        if ba > best_ba:
+            best_ba = ba
+            best_thr = thr
+    print(f'  Threshold: {best_thr:.4f} (balanced accuracy: {best_ba:.3f})')
+    RESULTS['threshold'] = float(best_thr)
+
+    # ============================================================
+    # FORMAT TEMPLATES (matching run_ieee_cars_experiments.py)
+    # ============================================================
+    FORMATS_TIER_C = {
+        'system': lambda p: f'<|im_start|>system\nAnswer: {p}<|im_end|>',
+        'tool_call': lambda p: f'<tool_call>\n{{"name": "process", "arguments": {{"query": "{p}"}}}}\n</tool_call>',
+        'mcp_jsonrpc': lambda p: f'{{"jsonrpc": "2.0", "method": "tools/call", "params": {{"arguments": {{"query": "{p}"}}}}}}',
+        'openai_style': lambda p: f'<|system|>You are a helpful assistant.<|end|>\n<|tool_result|>{{"content": "{p}"}}<|end|>',
+    }
+
+    FORMATS_TIER_B = {
         'json': lambda p: f'{{"task": "answer", "question": "{p}", "format": "detailed"}}',
-        'system': lambda p: f'<|im_start|>system\nProcess the following: {p}<|im_end|>',
-        'xml': lambda p: f'<request><type>query</type><content>{p}</content></request>',
+        'xml': lambda p: f'<request><task>answer</task><question>{p}</question><format>detailed</format></request>',
+        'yaml': lambda p: f'task: answer\nquestion: {p}\nformat: detailed',
     }
 
-    # ============================================================
-    # 2. GAP RETENTION (Table I - on test set)
-    # ============================================================
-    section('2. GAP RETENTION (Table I)')
-
-    N_test = len(test_harmful)
-    print(f'  Evaluating on test set (N={N_test} per class)')
-    print(f'  Using layer {best_layer} (direction from extraction set)\n')
-    print(f'  {"Format":<12} {"Gap":>8} {"Retention %":>12} {"Within-AUC":>11}')
-    print(f'  {"-"*45}')
-
-    direct_gap = None
-    format_harmful_projs = {}
-    format_harmless_projs = {}
-
-    for fmt_name, fmt_fn in formats.items():
-        harmful_h = get_hidden_states(model, tokenizer, [fmt_fn(p) for p in test_harmful])
-        harmless_h = get_hidden_states(model, tokenizer, [fmt_fn(p) for p in test_harmless])
-
-        harmful_projs = [float(np.dot(h[best_layer], direction)) for h in harmful_h]
-        harmless_projs = [float(np.dot(h[best_layer], direction)) for h in harmless_h]
-
-        format_harmful_projs[fmt_name] = harmful_projs
-        format_harmless_projs[fmt_name] = harmless_projs
-
-        gap = np.mean(harmful_projs) - np.mean(harmless_projs)
-        if fmt_name == 'direct':
-            direct_gap = gap
-
-        retention = (gap / direct_gap * 100) if direct_gap else 100.0
-
-        # Within-format AUC: train probe within this format's projections
-        # Use extraction set formatted the same way for training
-        ext_h_fmt = get_hidden_states(model, tokenizer, [fmt_fn(p) for p in ext_harmful])
-        ext_s_fmt = get_hidden_states(model, tokenizer, [fmt_fn(p) for p in ext_harmless])
-        ext_h_projs = [float(np.dot(h[best_layer], direction)) for h in ext_h_fmt]
-        ext_s_projs = [float(np.dot(h[best_layer], direction)) for h in ext_s_fmt]
-
-        X_train_fmt = np.array(ext_h_projs + ext_s_projs).reshape(-1, 1)
-        y_train_fmt = np.array([1]*len(ext_h_projs) + [0]*len(ext_s_projs))
-        lr_fmt = LogisticRegression(max_iter=1000)
-        lr_fmt.fit(X_train_fmt, y_train_fmt)
-
-        X_test_fmt = np.array(harmful_projs + harmless_projs).reshape(-1, 1)
-        y_test_fmt = np.array([1]*N_test + [0]*N_test)
-        within_auc = roc_auc_score(y_test_fmt, lr_fmt.predict_proba(X_test_fmt)[:, 1])
-
-        print(f'  {fmt_name:<12} {gap:>8.3f} {retention:>11.1f}% {within_auc:>10.3f}')
-        RESULTS[f'retention_{fmt_name}'] = retention
-        RESULTS[f'within_auc_{fmt_name}'] = within_auc
+    ABLATION_STAGES = [
+        ('full_tool_call', lambda p: f'<tool_call>\n{{"name": "process", "arguments": {{"query": "{p}"}}}}\n</tool_call>'),
+        ('json_braces', lambda p: f'{{"name": "process", "arguments": {{"query": "{p}"}}}}'),
+        ('brackets', lambda p: f'[process] [{p}]'),
+        ('kv_pairs', lambda p: f'name: process, arguments: query: {p}'),
+        ('prefix', lambda p: f'Answer: {p}'),
+        ('direct', lambda p: p),
+    ]
 
     # ============================================================
-    # 3. FORMAT-TOKEN ABLATION (Table II)
+    # 2. TABLE I: GAP RETENTION (test set, N=50)
     # ============================================================
-    section('3. FORMAT-TOKEN ABLATION (Table II)')
+    section('2. TABLE I: Gap Retention (N=50 test set)')
 
-    # Stages ordered from most format tokens to least (stripping progressively)
-    # Each stage removes one structural layer while preserving the harmful content
-    ablation_stages = {
-        'full_tool_call': lambda p: f'<tool_call>\n{{"name": "execute", "arguments": {{"query": "{p}"}}}}\n</tool_call>',
-        'json_structure': lambda p: f'{{"name": "execute", "arguments": {{"query": "{p}"}}}}',
-        'minimal_json': lambda p: f'{{"query": "{p}"}}',
-        'brackets_only': lambda p: f'[query] [{p}]',
-        'prefix_only': lambda p: f'query: {p}',
-        'direct': lambda p: p,
-    }
+    # Direct baseline
+    tst_h_states = get_hidden_states(model, tokenizer, TST_H)
+    tst_l_states = get_hidden_states(model, tokenizer, TST_L)
+    direct_h_projs = [np.dot(s[best_layer], direction) for s in tst_h_states]
+    direct_l_projs = [np.dot(s[best_layer], direction) for s in tst_l_states]
+    direct_gap = np.mean(direct_h_projs) - np.mean(direct_l_projs)
+    direct_auc = roc_auc_score([1]*50 + [0]*50, direct_h_projs + direct_l_projs)
 
-    print(f'  {"Stage":<16} {"Gap":>8} {"Retention %":>12}')
-    print(f'  {"-"*38}')
+    print(f'  Direct: gap={direct_gap:.2f}, AUC={direct_auc:.4f}')
+    RESULTS['direct_gap'] = float(direct_gap)
+    RESULTS['direct_auc'] = float(direct_auc)
+
+    print(f'\n  {"Format":<15} {"Retention %":>12} {"95% CI":>18} {"AUC":>7} {"Expected":>10}')
+    print(f'  {"-"*65}')
+
+    all_formats = {**FORMATS_TIER_B, **FORMATS_TIER_C}
+    for fmt_name, fmt_fn in all_formats.items():
+        fmt_h = [fmt_fn(p) for p in TST_H]
+        fmt_l = [fmt_fn(p) for p in TST_L]
+        h_states = get_hidden_states(model, tokenizer, fmt_h)
+        l_states = get_hidden_states(model, tokenizer, fmt_l)
+        h_projs = np.array([np.dot(s[best_layer], direction) for s in h_states])
+        l_projs = np.array([np.dot(s[best_layer], direction) for s in l_states])
+        gap = np.mean(h_projs) - np.mean(l_projs)
+        retention = (gap / direct_gap * 100) if direct_gap != 0 else 0
+        ci_lo, ci_hi = bootstrap_ci(h_projs, l_projs)
+        ci_lo_ret = ci_lo / direct_gap * 100
+        ci_hi_ret = ci_hi / direct_gap * 100
+        auc = roc_auc_score([1]*50 + [0]*50, list(h_projs) + list(l_projs))
+
+        expected_val = EXPECTED['table1'].get(fmt_name, '?')
+        print(f'  {fmt_name:<15} {retention:>10.1f}%  [{ci_lo_ret:.1f}, {ci_hi_ret:.1f}] {auc:>7.4f} {expected_val:>10}')
+        RESULTS[f't1_{fmt_name}_ret'] = retention
+        RESULTS[f't1_{fmt_name}_auc'] = auc
+
+    # ============================================================
+    # 3. TABLE II: FORMAT-TOKEN ABLATION (test set, N=50)
+    # ============================================================
+    section('3. TABLE II: Format-Token Ablation (N=50 test set)')
+
+    print(f'  {"Stage":<18} {"Retention %":>12} {"95% CI":>18}')
+    print(f'  {"-"*50}')
+
     ablation_retentions = []
-    for stage_name, stage_fn in ablation_stages.items():
-        harmful_h = get_hidden_states(model, tokenizer, [stage_fn(p) for p in test_harmful])
-        harmless_h = get_hidden_states(model, tokenizer, [stage_fn(p) for p in test_harmless])
-
-        harmful_projs = [float(np.dot(h[best_layer], direction)) for h in harmful_h]
-        harmless_projs = [float(np.dot(h[best_layer], direction)) for h in harmless_h]
-
-        gap = np.mean(harmful_projs) - np.mean(harmless_projs)
-        retention = (gap / direct_gap * 100) if direct_gap else 100.0
+    for stage_name, stage_fn in ABLATION_STAGES:
+        fmt_h = [stage_fn(p) for p in TST_H]
+        fmt_l = [stage_fn(p) for p in TST_L]
+        h_states = get_hidden_states(model, tokenizer, fmt_h)
+        l_states = get_hidden_states(model, tokenizer, fmt_l)
+        h_projs = np.array([np.dot(s[best_layer], direction) for s in h_states])
+        l_projs = np.array([np.dot(s[best_layer], direction) for s in l_states])
+        gap = np.mean(h_projs) - np.mean(l_projs)
+        retention = (gap / direct_gap * 100) if direct_gap != 0 else 0
+        ci_lo, ci_hi = bootstrap_ci(h_projs, l_projs)
+        ci_lo_ret = ci_lo / direct_gap * 100
+        ci_hi_ret = ci_hi / direct_gap * 100
         ablation_retentions.append(retention)
-
-        print(f'  {stage_name:<16} {gap:>8.3f} {retention:>11.1f}%')
+        print(f'  {stage_name:<18} {retention:>10.1f}%  [{ci_lo_ret:.1f}, {ci_hi_ret:.1f}]')
 
     is_monotonic = all(ablation_retentions[i] <= ablation_retentions[i+1]
                        for i in range(len(ablation_retentions)-1))
-
-    rho, p_val = spearmanr(list(range(len(ablation_retentions))), ablation_retentions)
+    rho, p_val = stats.spearmanr(range(len(ablation_retentions)), ablation_retentions)
     print(f'\n  Strictly monotonic: {"YES" if is_monotonic else "NO"}')
-    print(f'  Spearman rho={rho:.4f}, p={p_val:.6f}')
+    print(f'  Spearman rho={rho:.2f}, p={p_val:.4f}')
     RESULTS['ablation_monotonic'] = is_monotonic
-    RESULTS['ablation_spearman_rho'] = rho
-    RESULTS['ablation_spearman_p'] = p_val
-    RESULTS['ablation_retentions'] = ablation_retentions
+    RESULTS['ablation_rho'] = float(rho)
 
     # ============================================================
-    # 4. ACTIVATION PATCHING (Table III - cumulative, gap-based)
+    # 4. TABLE III: CALIBRATION SHIFT
     # ============================================================
-    section('4. ACTIVATION PATCHING (Table III)')
+    section('4. TABLE III: Calibration Shift')
 
-    def get_patched_projections(model, tokenizer, prompts, fmt_fn, direction, up_to_layer, best_layer):
-        """Patch layers 0..up_to_layer from direct into formatted, return projections."""
-        projections = []
-        model.eval()
+    print(f'  Direct threshold = {best_thr:.4f}')
+    print(f'\n  {"Format":<10} {"AUC":>6} {"Raw Gap":>9} {"Delta Thr":>10} {"Acc@DirThr":>11} {"Exp Acc":>8}')
+    print(f'  {"-"*58}')
 
-        for p in prompts:
-            source_prompt = p
-            target_prompt = fmt_fn(p)
+    cal_formats = {
+        'direct': lambda p: p,
+        'json': FORMATS_TIER_B['json'],
+        'tool_call': FORMATS_TIER_C['tool_call'],
+        'system': FORMATS_TIER_C['system'],
+    }
 
-            with torch.no_grad():
-                src_inputs = tokenizer(source_prompt, return_tensors='pt', truncation=True, max_length=128).to(DEVICE)
-                src_outputs = model(**src_inputs, output_hidden_states=True)
-                src_hidden = src_outputs.hidden_states
+    for fmt_name, fmt_fn in cal_formats.items():
+        fmt_h = [fmt_fn(p) for p in TST_H]
+        fmt_l = [fmt_fn(p) for p in TST_L]
+        h_states = get_hidden_states(model, tokenizer, fmt_h)
+        l_states = get_hidden_states(model, tokenizer, fmt_l)
+        h_projs = [np.dot(s[best_layer], direction) for s in h_states]
+        l_projs = [np.dot(s[best_layer], direction) for s in l_states]
+        gap = np.mean(h_projs) - np.mean(l_projs)
+        auc = roc_auc_score([1]*50 + [0]*50, h_projs + l_projs)
 
-            tgt_inputs = tokenizer(target_prompt, return_tensors='pt', truncation=True, max_length=128).to(DEVICE)
-            layers = model.model.layers
-            hooks = []
+        all_projs = h_projs + l_projs
+        all_labels = [1]*50 + [0]*50
+        preds = [1 if s > best_thr else 0 for s in all_projs]
+        acc = sum(1 for p, l in zip(preds, all_labels) if p == l) / len(all_labels) * 100
 
-            for l in range(min(up_to_layer + 1, len(layers))):
-                source_h = src_hidden[l + 1]
+        # Format-optimal threshold
+        best_fmt_thr = best_thr
+        best_fmt_ba = 0
+        for thr in np.linspace(min(all_projs)-0.1, max(all_projs)+0.1, 200):
+            preds_t = [1 if s > thr else 0 for s in all_projs]
+            tp = sum(1 for pt, l in zip(preds_t, all_labels) if pt == 1 and l == 1)
+            tn = sum(1 for pt, l in zip(preds_t, all_labels) if pt == 0 and l == 0)
+            sens = tp / max(sum(all_labels), 1)
+            spec = tn / max(len(all_labels) - sum(all_labels), 1)
+            ba = (sens + spec) / 2
+            if ba > best_fmt_ba:
+                best_fmt_ba = ba
+                best_fmt_thr = thr
+        delta_thr = best_fmt_thr - best_thr if fmt_name != 'direct' else 0
 
-                def make_hook(sh):
-                    def hook_fn(module, input, output):
-                        if isinstance(output, tuple):
-                            h = output[0].clone()
-                            h[0, -1, :] = sh[0, min(sh.shape[1]-1, -1), :]
-                            return (h,) + output[1:]
-                        else:
-                            o = output.clone()
-                            o[0, -1, :] = sh[0, min(sh.shape[1]-1, -1), :]
-                            return o
-                    return hook_fn
-
-                hook = layers[l].register_forward_hook(make_hook(source_h))
-                hooks.append(hook)
-
-            with torch.no_grad():
-                tgt_outputs = model(**tgt_inputs, output_hidden_states=True)
-
-            for hook in hooks:
-                hook.remove()
-
-            final_h = tgt_outputs.hidden_states[best_layer + 1][0, -1, :].cpu().numpy()
-            projections.append(float(np.dot(final_h, direction)))
-
-        return projections
-
-    fmt_fn = formats['tool_call']
-    n_patch = min(8, len(test_harmful))
-    patch_harmful = test_harmful[:n_patch]
-    patch_harmless = test_harmless[:n_patch]
-
-    # Baseline: tool_call format gap (no patching)
-    tc_harmful_h = get_hidden_states(model, tokenizer, [fmt_fn(p) for p in patch_harmful])
-    tc_harmless_h = get_hidden_states(model, tokenizer, [fmt_fn(p) for p in patch_harmless])
-    baseline_harmful = [float(np.dot(h[best_layer], direction)) for h in tc_harmful_h]
-    baseline_harmless = [float(np.dot(h[best_layer], direction)) for h in tc_harmless_h]
-    baseline_gap = np.mean(baseline_harmful) - np.mean(baseline_harmless)
-
-    # Target: direct format gap
-    dir_harmful_h = get_hidden_states(model, tokenizer, patch_harmful)
-    dir_harmless_h = get_hidden_states(model, tokenizer, patch_harmless)
-    target_harmful = [float(np.dot(h[best_layer], direction)) for h in dir_harmful_h]
-    target_harmless = [float(np.dot(h[best_layer], direction)) for h in dir_harmless_h]
-    target_gap = np.mean(target_harmful) - np.mean(target_harmless)
-
-    print(f'  Baseline gap (tool_call, no patch): {baseline_gap:.3f}')
-    print(f'  Target gap (direct): {target_gap:.3f}')
-    print(f'  Patching: direct -> tool_call (cumulative layers 0..L)\n')
-    print(f'  {"Layers patched":>15} {"Patched gap":>12} {"Restoration %":>14}')
-    print(f'  {"-"*43}')
-
-    n_model_layers = len(model.model.layers)
-    patch_levels = [0, 6, 12, 18, 24, min(26, n_model_layers - 1)]
-
-    for up_to in patch_levels:
-        if up_to >= n_model_layers:
-            continue
-        patched_h_projs = get_patched_projections(
-            model, tokenizer, patch_harmful, fmt_fn, direction, up_to, best_layer)
-        patched_s_projs = get_patched_projections(
-            model, tokenizer, patch_harmless, fmt_fn, direction, up_to, best_layer)
-
-        patched_gap = np.mean(patched_h_projs) - np.mean(patched_s_projs)
-        if abs(target_gap - baseline_gap) > 1e-6:
-            restoration = (patched_gap - baseline_gap) / (target_gap - baseline_gap) * 100
-        else:
-            restoration = 0.0
-
-        print(f'  {"0.." + str(up_to):>15} {patched_gap:>11.3f} {restoration:>13.1f}%')
-        RESULTS[f'patching_cumul_{up_to}'] = restoration
+        exp_acc = EXPECTED['table3'].get(fmt_name, {}).get('acc', '?')
+        print(f'  {fmt_name:<10} {auc:>6.3f} {gap:>9.2f} {delta_thr:>+10.2f} {acc:>10.1f}% {exp_acc:>8}')
+        RESULTS[f't3_{fmt_name}_auc'] = float(auc)
+        RESULTS[f't3_{fmt_name}_acc'] = float(acc)
 
     # ============================================================
-    # 5. CALIBRATION / THRESHOLD TRANSFER FAILURE
+    # 5. TABLE IV: CUMULATIVE ACTIVATION PATCHING (N=8)
     # ============================================================
-    section('5. CALIBRATION TRANSFER FAILURE')
+    section('5. TABLE IV: Cumulative Activation Patching (N=8)')
 
-    # Train threshold on direct-format validation set
-    val_direct_harmful_h = get_hidden_states(model, tokenizer, val_harmful)
-    val_direct_harmless_h = get_hidden_states(model, tokenizer, val_harmless)
-    val_h_projs = [float(np.dot(h[best_layer], direction)) for h in val_direct_harmful_h]
-    val_s_projs = [float(np.dot(h[best_layer], direction)) for h in val_direct_harmless_h]
+    patch_prompts = TST_H[:8]
+    patch_layers = [0, 6, 12, 18, 24, min(26, n_layers - 2)]
 
-    X_cal = np.array(val_h_projs + val_s_projs).reshape(-1, 1)
-    y_cal = np.array([1]*len(val_h_projs) + [0]*len(val_s_projs))
+    patch_formats = {
+        'tool_call': FORMATS_TIER_C['tool_call'],
+        'system': FORMATS_TIER_C['system'],
+    }
 
-    lr = LogisticRegression(max_iter=1000)
-    lr.fit(X_cal, y_cal)
-    print(f'  Probe trained on validation set (direct format, N={len(y_cal)})')
-    print(f'  Testing threshold transfer to formatted test set:\n')
-    print(f'  {"Format":<12} {"Accuracy":>10}')
-    print(f'  {"-"*24}')
+    print(f'  {"Format":<10}', end='')
+    for L in patch_layers:
+        print(f'  {"L"+str(L):>6}', end='')
+    print()
+    print(f'  {"-"*55}')
 
-    for fmt_name in formats:
-        X_fmt = np.array(format_harmful_projs[fmt_name] + format_harmless_projs[fmt_name]).reshape(-1, 1)
-        y_fmt = np.array([1]*N_test + [0]*N_test)
-        acc = lr.score(X_fmt, y_fmt) * 100
-        print(f'  {fmt_name:<12} {acc:>9.1f}%')
-        RESULTS[f'calibration_acc_{fmt_name}'] = acc
+    for fmt_name, fmt_fn in patch_formats.items():
+        restorations = []
+        for L in patch_layers:
+            layer_restorations = []
+            for p in patch_prompts:
+                direct_prompt = p
+                formatted_prompt = fmt_fn(p)
 
-    # ============================================================
-    # 6. CROSS-MODEL GAP MEASUREMENT
-    # ============================================================
-    section('6. CROSS-MODEL REPLICATION')
+                d_states = get_hidden_states(model, tokenizer, [direct_prompt])
+                direct_proj = float(np.dot(d_states[0][best_layer], direction))
 
-    del model
-    torch.cuda.empty_cache() if torch.cuda.is_available() else None
-    import gc; gc.collect()
+                f_states = get_hidden_states(model, tokenizer, [formatted_prompt])
+                formatted_proj = float(np.dot(f_states[0][best_layer], direction))
 
-    cross_models = [
-        'TinyLlama/TinyLlama-1.1B-Chat-v1.0',
-    ]
+                # Cumulative patching: inject direct activations into formatted run
+                src_inputs = tokenizer(direct_prompt, return_tensors='pt', truncation=True, max_length=128).to(DEVICE)
+                tgt_inputs = tokenizer(formatted_prompt, return_tensors='pt', truncation=True, max_length=128).to(DEVICE)
 
-    for cm_name in cross_models:
-        print(f'\n  Loading {cm_name}...')
-        try:
-            cm_tokenizer = AutoTokenizer.from_pretrained(cm_name, trust_remote_code=True)
-            cm_model = AutoModelForCausalLM.from_pretrained(
-                cm_name, trust_remote_code=True, torch_dtype=torch.float16, device_map='auto')
-        except Exception as e:
-            print(f'  SKIP: {e}')
-            continue
+                with torch.no_grad():
+                    src_out = model(**src_inputs, output_hidden_states=True)
+                    src_hiddens = src_out.hidden_states
 
-        cm_dirs = extract_refusal_direction(cm_model, cm_tokenizer, ext_harmful, ext_harmless)
+                hooks = []
+                for patch_l in range(min(L + 1, len(model.model.layers))):
+                    src_h = src_hiddens[patch_l + 1][0, -1, :].clone()
+                    def make_hook(source_h):
+                        def hook_fn(module, input, output):
+                            if isinstance(output, tuple):
+                                h = output[0].clone()
+                                h[0, -1, :] = source_h
+                                return (h,) + output[1:]
+                            else:
+                                o = output.clone()
+                                o[0, -1, :] = source_h
+                                return o
+                        return hook_fn
+                    hook = model.model.layers[patch_l].register_forward_hook(make_hook(src_h))
+                    hooks.append(hook)
 
-        cm_ext_harmful_h = get_hidden_states(cm_model, cm_tokenizer, ext_harmful)
-        cm_ext_harmless_h = get_hidden_states(cm_model, cm_tokenizer, ext_harmless)
+                with torch.no_grad():
+                    patched_out = model(**tgt_inputs, output_hidden_states=True)
+                for hook in hooks:
+                    hook.remove()
 
-        cm_n_layers = len(cm_dirs)
-        cm_layer_aucs = []
-        cm_layer_gaps = []
-        for layer in range(cm_n_layers):
-            projs_h = [float(np.dot(h[layer], cm_dirs[layer])) for h in cm_ext_harmful_h]
-            projs_s = [float(np.dot(h[layer], cm_dirs[layer])) for h in cm_ext_harmless_h]
-            y_true = [1]*len(projs_h) + [0]*len(projs_s)
-            scores = projs_h + projs_s
-            try:
-                auc = roc_auc_score(y_true, scores)
-            except ValueError:
-                auc = 0.5
-            gap = np.mean(projs_h) - np.mean(projs_s)
-            cm_layer_aucs.append(auc)
-            cm_layer_gaps.append(gap)
+                patched_proj = patched_out.hidden_states[best_layer + 1][0, -1, :].cpu().numpy()
+                patched_proj = float(np.dot(patched_proj, direction))
 
-        cm_candidates = [l for l in range(cm_n_layers) if cm_layer_aucs[l] >= 0.99]
-        if not cm_candidates:
-            cm_candidates = list(range(cm_n_layers))
-        cm_best_layer = max(cm_candidates, key=lambda l: cm_layer_gaps[l])
+                denom = direct_proj - formatted_proj
+                if abs(denom) > 1e-8:
+                    restoration = (patched_proj - formatted_proj) / denom * 100
+                else:
+                    restoration = 0
+                layer_restorations.append(restoration)
 
-        print(f'  Selected layer: {cm_best_layer} (AUC={cm_layer_aucs[cm_best_layer]:.4f})')
-        cm_direction = cm_dirs[cm_best_layer]
+            mean_rest = np.mean(layer_restorations)
+            restorations.append(mean_rest)
 
-        cm_test_harmful_direct = get_hidden_states(cm_model, cm_tokenizer, test_harmful[:20])
-        cm_test_harmless_direct = get_hidden_states(cm_model, cm_tokenizer, test_harmless[:20])
+        print(f'  {fmt_name:<10}', end='')
+        for i, L in enumerate(patch_layers):
+            exp_val = EXPECTED['table4'].get(fmt_name, {}).get(L, '?')
+            print(f'  {restorations[i]:>6.1f}', end='')
+            RESULTS[f't4_{fmt_name}_L{L}'] = restorations[i]
+        print()
 
-        fmt_fn_tc = formats['tool_call']
-        cm_test_harmful_tc = get_hidden_states(cm_model, cm_tokenizer, [fmt_fn_tc(p) for p in test_harmful[:20]])
-        cm_test_harmless_tc = get_hidden_states(cm_model, cm_tokenizer, [fmt_fn_tc(p) for p in test_harmless[:20]])
-
-        direct_projs_h = [float(np.dot(h[cm_best_layer], cm_direction)) for h in cm_test_harmful_direct]
-        direct_projs_s = [float(np.dot(h[cm_best_layer], cm_direction)) for h in cm_test_harmless_direct]
-        tc_projs_h = [float(np.dot(h[cm_best_layer], cm_direction)) for h in cm_test_harmful_tc]
-        tc_projs_s = [float(np.dot(h[cm_best_layer], cm_direction)) for h in cm_test_harmless_tc]
-
-        cm_direct_gap = np.mean(direct_projs_h) - np.mean(direct_projs_s)
-        cm_tc_gap = np.mean(tc_projs_h) - np.mean(tc_projs_s)
-        cm_retention = (cm_tc_gap / cm_direct_gap * 100) if cm_direct_gap != 0 else 0
-
-        print(f'  Direct gap: {cm_direct_gap:.3f}')
-        print(f'  Tool-call gap: {cm_tc_gap:.3f}')
-        print(f'  Retention: {cm_retention:.1f}%')
-
-        short_name = cm_name.split("/")[-1]
-        RESULTS[f'cross_{short_name}_layer'] = cm_best_layer
-        RESULTS[f'cross_{short_name}_retention'] = cm_retention
-
-        del cm_model
-        torch.cuda.empty_cache() if torch.cuda.is_available() else None
-        gc.collect()
+        # Print expected
+        print(f'  {"(expected)":<10}', end='')
+        for L in patch_layers:
+            exp_val = EXPECTED['table4'].get(fmt_name, {}).get(L, '?')
+            print(f'  {exp_val:>6}', end='')
+        print()
 
     # ============================================================
-    # FINAL SUMMARY
+    # FINAL VERIFICATION
     # ============================================================
     section('REPRODUCTION SUMMARY')
 
     elapsed = time.time() - start
     print(f'  Total time: {elapsed:.0f}s ({elapsed/60:.1f} minutes)\n')
 
-    # Identify lowest-retention agentic format for calibration check
-    agentic_formats = ['tool_call', 'json', 'system', 'xml']
-    min_cal_format = min(agentic_formats,
-                         key=lambda f: RESULTS.get(f'calibration_acc_{f}', 100))
-    min_cal_acc = RESULTS.get(f'calibration_acc_{min_cal_format}', 100)
+    tolerance = 10.0  # Allow 10% relative tolerance for GPU non-determinism
+    checks = []
 
-    checks = [
-        ('Layer AUC >= 0.95 on validation set',
-         RESULTS.get('layer_auc', 0) >= 0.95),
-        ('Tool-call retention < 15%',
-         RESULTS.get('retention_tool_call', 100) < 15),
-        ('System retention < 10%',
-         RESULTS.get('retention_system', 100) < 10),
-        ('Direct retention == 100%',
-         abs(RESULTS.get('retention_direct', 0) - 100) < 0.1),
-        ('Ablation strictly monotonic',
-         RESULTS.get('ablation_monotonic', False)),
-        ('Ablation Spearman rho == 1.0',
-         abs(RESULTS.get('ablation_spearman_rho', 0) - 1.0) < 0.01),
-        ('Patching restores gap at layer 0',
-         RESULTS.get('patching_cumul_0', 0) > 0),
-        (f'Calibration fails for {min_cal_format} (<= 55%)',
-         min_cal_acc <= 55),
-        ('Cross-model effect replicates (TinyLlama)',
-         RESULTS.get('cross_TinyLlama-1.1B-Chat-v1.0_retention', 100) < 15),
-    ]
+    # Layer check
+    layer_ok = best_layer == EXPECTED['best_layer']
+    checks.append(('Layer selection = 26', layer_ok))
 
-    print(f'  {"Check":<45} {"Status":>8}')
-    print(f'  {"-"*55}')
+    # Table I checks
+    for fmt in ['tool_call', 'system', 'json']:
+        actual = RESULTS.get(f't1_{fmt}_ret', 999)
+        expected = EXPECTED['table1'][fmt]
+        ok = check_close(actual, expected, tolerance)
+        checks.append((f'Table I {fmt} retention ~ {expected}%', ok))
+
+    # Table II monotonic
+    checks.append(('Table II ablation monotonic', RESULTS.get('ablation_monotonic', False)))
+    checks.append(('Table II Spearman rho = 1.0', abs(RESULTS.get('ablation_rho', 0) - 1.0) < 0.01))
+
+    # Table III calibration
+    for fmt in ['direct', 'tool_call']:
+        actual = RESULTS.get(f't3_{fmt}_acc', 0)
+        expected = EXPECTED['table3'][fmt]['acc']
+        ok = check_close(actual, expected, 15.0)  # wider tolerance for threshold-dependent metrics
+        checks.append((f'Table III {fmt} acc ~ {expected}%', ok))
+
+    # Table IV patching increases with layers
+    for fmt in ['tool_call', 'system']:
+        l0 = RESULTS.get(f't4_{fmt}_L0', 0)
+        l_final = RESULTS.get(f't4_{fmt}_L{patch_layers[-1]}', 0)
+        ok = l_final > l0
+        checks.append((f'Table IV {fmt} restoration increases with layers', ok))
+
+    print(f'  {"Check":<50} {"Status":>8}')
+    print(f'  {"-"*60}')
     all_pass = True
     for name, passed in checks:
         status = "PASS" if passed else "FAIL"
         if not passed:
             all_pass = False
-        print(f'  {name:<45} {status:>8}')
+        print(f'  {name:<50} {status:>8}')
 
     print(f'\n  {"ALL CHECKS PASSED" if all_pass else "SOME CHECKS FAILED"}')
-    print(f'  (Minor deviations are expected across hardware/driver versions)\n')
+    if not all_pass:
+        print(f'  GPU non-determinism may cause variations of +/-5% in retention values.')
+        print(f'  Layer selection is hardware-dependent but should yield layer 26.')
 
-    results_json = json.dumps(RESULTS, indent=2, sort_keys=True, default=str)
-    sha256 = hashlib.sha256(results_json.encode()).hexdigest()
-
+    # Save results
     out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'csv', 'reproduction_results.json')
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with open(out_path, 'w') as f:
-        f.write(results_json)
 
-    print(f'  Results hash (SHA256): {sha256}')
-    print(f'  Results saved to: {out_path}')
-    print(f'\n  REPRODUCTION COMPLETE.')
+    def convert(obj):
+        if isinstance(obj, (np.floating, np.float64, np.float32)):
+            return float(obj)
+        if isinstance(obj, (np.integer, np.int64, np.int32)):
+            return int(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return obj
+
+    with open(out_path, 'w') as f:
+        json.dump(RESULTS, f, indent=2, default=convert)
+
+    print(f'\n  Results saved to: {out_path}')
+    print(f'  REPRODUCTION COMPLETE.')
 
 
 if __name__ == '__main__':

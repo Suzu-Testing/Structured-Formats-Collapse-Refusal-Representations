@@ -1,0 +1,4 @@
+intervention,mean_projection,restoration_pct,behavioral_refusal_pct,n_features_intervened,baseline_formatted,baseline_direct
+addback_safety_to_toolcall,32.6015625,72.19440713151789,90.0,19,4.8890625,43.275
+remove_safety_from_direct,19.052734375,-63.101925347010216,90.0,20,4.8890625,43.275
+remove_format_from_toolcall,7.407421875,6.560630113566981,90.0,20,4.8890625,43.275
