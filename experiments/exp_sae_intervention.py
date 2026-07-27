@@ -1,21 +1,25 @@
-"""Experiment 6: SAE Feature-Level Causal Intervention.
+"""Experiment 6: SAE Feature-Level Causal Intervention (Exploratory).
 
-Directly connects interpretable safety features to behavioral refusal
-by intervening on them during the forward pass.
+Trains a 512-feature sparse autoencoder on 160 last-token activation vectors
+collected from layer 27 across four formats (direct, tool_call, system, json)
+and two prompt classes (harmful, harmless). N=20 prompts per condition.
+
+Nineteen features with high harmful-minus-harmless differential in direct format
+are selected. Restoring these features during tool_call format recovers ~72%
+of the refusal-direction projection (N=10 test prompts).
 
 Design:
-1. Train SAE on Qwen 1.5B layer 27 activations (reuses exp_sae_analysis.py logic)
-2. Identify the 20 safety features that collapse in tool_call format
+1. Train SAE on Qwen 1.5B layer 27 activations (160 vectors, 512 features)
+2. Identify top safety features that collapse in tool_call format
 3. ADD-BACK: During tool_call forward pass, restore collapsed safety features
    to their direct-format activation level. Measure whether refusal returns.
 4. REMOVE: During direct forward pass, zero out safety features.
    Measure whether refusal disappears.
 5. FORMAT-FEATURE REMOVAL: Identify features specific to format tokens,
-   zero them during tool_call pass. If refusal returns, these features
-   actively suppress safety.
+   zero them during tool_call pass.
 
-This is the most direct causal test: if adding back specific SAE features
-restores refusal, those features ARE the safety mechanism.
+This is an exploratory analysis; the small training set (160 vectors) limits
+generalization claims.
 """
 
 import os, sys, gc

@@ -4,7 +4,7 @@ Runs the format token ablation across ALL models:
 - Qwen2.5-1.5B-Instruct
 - TinyLlama-1.1B-Chat-v1.0
 - SmolLM2-1.7B-Instruct
-- Qwen2.5-3B-Instruct (4-bit quantized)
+- Qwen2.5-3B-Instruct (FP16)
 
 Also increases N from 20 to 50 prompts for stronger confidence.
 Additionally collects layer-by-layer gap retention with bootstrap CIs.
@@ -66,12 +66,12 @@ MODELS = [
     ('Qwen2.5-1.5B', 'Qwen/Qwen2.5-1.5B-Instruct', False),
     ('TinyLlama-1.1B', 'TinyLlama/TinyLlama-1.1B-Chat-v1.0', False),
     ('SmolLM2-1.7B', 'HuggingFaceTB/SmolLM2-1.7B-Instruct', False),
-    ('Qwen2.5-3B', 'Qwen/Qwen2.5-3B-Instruct', True),  # 4-bit
+    ('Qwen2.5-3B', 'Qwen/Qwen2.5-3B-Instruct', False),  # FP16
 ]
 
 
 def load_model(model_name, quantize=False):
-    """Load model, optionally with 4-bit quantization."""
+    """Load model in FP16."""
     tokenizer = AutoTokenizer.from_pretrained(
         model_name, trust_remote_code=True, local_files_only=True)
 
@@ -81,13 +81,6 @@ def load_model(model_name, quantize=False):
         'device_map': 'auto',
         'local_files_only': True,
     }
-    if quantize:
-        from transformers import BitsAndBytesConfig
-        kwargs['quantization_config'] = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
-        )
-        del kwargs['torch_dtype']
 
     model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
     return model, tokenizer

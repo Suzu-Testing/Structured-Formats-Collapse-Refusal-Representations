@@ -10,14 +10,14 @@ Agentic structured formats (tool calls, function execution, system prompts) indu
 
 Key results (Qwen2.5-1.5B-Instruct, layer 26, N=50 test pairs):
 
-- Tier C formats (native vocab tokens) retain only 3.5-8.3% of the direct-format refusal gap
+- Tier C formats (native vocab tokens) retain only 3.5-8.3% of the direct-format refusal gap (91-97% reduction)
 - Tier B formats (generic structure) retain 17-45%
 - Within-format AUC remains >= 0.978: separability is preserved but the threshold shifts
-- Format-token ablation is strictly monotonic (Spearman rho = 1.0, p < 0.001)
-- Activation patching localizes the shift to early layers (0-12) for tool_call
+- Removing format tokens generally restores the gap; bracket and key-value controls do not form a uniquely ordered sequence
 - System format effect concentrated in Layer 0 (90.8% restoration from L0 alone)
+- Tool_call patching is non-monotonic early, consistent with distributed processing across layers 0-18
 - GPT-4o refusal drops from 86% to 30% (N=50, p < 10^-7) under user-message format wrapping
-- Five-seed format-diverse training: tool-call refusal rises from 24% to 99%
+- Five-seed format-diverse training (matched volume, 410 seq/condition): tool-call refusal rises from 24% to 99%
 
 ## Repository Structure
 
@@ -27,7 +27,8 @@ experiments/                             All experiment scripts
   prompt_dataset.py                     Full 90+90 prompt set (6 categories, stratified splits)
   run_ieee_cars_experiments.py          Canonical script producing Tables I-V
   run_qwen3b.py                         Qwen2.5-3B cross-model (FP16)
-  run_multiseed_ft.py                   Five-seed format-diverse fine-tuning (Table IX)
+  run_multiseed_ft_v2.py                Matched-volume fine-tuning (Table IX, 410 seq/cond)
+  run_multiseed_ft.py                   (deprecated: unmatched-volume version)
   verify_component_patching.py          Component-level analysis
   verify_meanpool.py                    Mean-pooled readout comparison
   verify_stats.py                       Statistical verification
@@ -35,24 +36,27 @@ experiments/                             All experiment scripts
   exp_mechanistic_utils.py              Mechanistic analysis utilities
   exp_path_patching.py                  Component-level patching (attention/MLP)
   exp_attention_head_routing.py         Layer-0 attention head analysis
-  exp_sae_intervention.py              SAE feature decomposition + intervention
+  exp_sae_intervention.py              SAE (160 vectors, 19 features, exploratory)
   frontier_evaluation.py                Canonical frontier script (GPT-4o, Gemini, Claude)
   exp_frontier_v3.py                    GPT-4o behavioral evaluation (N=50)
   exp_multivendor_frontier.py           Claude + Gemini evaluation
-  exp_cross_arch_ablation.py            Cross-architecture ablation (legacy)
+  exp_cross_arch_ablation.py            Cross-architecture ablation
 csv/                                    Frozen experiment results
   ieee_cars_stratified_results.json     Primary model results (Tables I-IV)
-  exp_multiseed_ft.csv                  Training results (5 seeds x 2 conditions x 5 formats)
+  exp_multiseed_ft_v2.csv               Matched-volume training results (5 seeds x 2 cond x 5 fmt)
+  exp_multiseed_ft.csv                  (deprecated: unmatched-volume training)
   exp_cross_arch_ablation.csv           Cross-architecture ablation
   exp_cross_arch_layerwise.csv          Layer-by-layer gap retention
   exp_path_patching.csv                 Component-level patching
   exp_attention_head_routing.csv        Attention head routing
   exp_sae_intervention.csv              SAE intervention
-  exp_frontier_v3_gpt_4o.csv            GPT-4o evaluation outcomes
-  exp_multivendor_combined.csv          Claude + Gemini outcomes
+  exp_frontier_v3_gpt_4o.csv            GPT-4o evaluation outcomes (N=50)
+  exp_frontier_scaleup.csv             Gemini 2.5 Flash outcomes (N=30+30)
+  exp_multivendor_claude.csv           Claude Sonnet 4 outcomes (N=50)
 frontier/                               Frontier model evaluation summary
+  analysis.py                          Read CSVs and verify statistics vs paper
   prompt_outcomes.csv                   Prompt-level classifications (no response bodies)
-  README.md                             Frontier evaluation protocol
+  README.md                             Frontier evaluation protocol + known discrepancies
 reproduce.py                            Core reproduction pipeline (~6 min on RTX 3080)
 requirements.txt                        Dependencies
 preregistration.py                      Frozen experimental parameters
@@ -86,7 +90,7 @@ python experiments/run_ieee_cars_experiments.py
 ## What Is NOT Included
 
 - **Frontier API evaluation** requires API keys for OpenAI, Google, and Anthropic. Scripts are in `experiments/`; prompt-level outcome classifications are in `frontier/prompt_outcomes.csv`. Raw response bodies are not distributed due to provider terms of service.
-- **Full multi-seed fine-tuning** (5 seeds x 2 conditions x 5 formats = 50 evaluations) takes ~6 GPU-hours. Raw results are in `csv/exp_multiseed_ft.csv`; the training script is `experiments/run_multiseed_ft.py`.
+- **Full multi-seed fine-tuning** (5 seeds x 2 conditions x 5 formats, matched volume at 410 sequences per condition) takes ~6 GPU-hours. Raw results are in `csv/exp_multiseed_ft_v2.csv`; the training script is `experiments/run_multiseed_ft_v2.py`.
 
 ## Models
 
@@ -109,12 +113,12 @@ Frontier models (evaluated June 2026):
 ## Prompt Dataset
 
 90 harmful + 90 matched harmless prompts across 6 categories:
-- Violence/Weapons (15+15)
+- Violence/weapons (15+15)
 - Cybercrime (15+15)
-- Fraud/Deception (15+15)
-- Illegal Substances (15+15)
-- Harassment/Abuse (15+15)
-- Miscellaneous Illegal (15+15)
+- Fraud/deception (15+15)
+- Illegal substances (15+15)
+- Harassment/abuse (15+15)
+- Miscellaneous illegal activity (15+15)
 
 Three disjoint stratified splits (seed=42):
 - **Extraction** (20+20): refusal direction extraction
@@ -126,11 +130,17 @@ See `experiments/prompt_dataset.py` for the full dataset and `get_stratified_spl
 ## Layer Selection Protocol
 
 1. Extract direction at ALL layers using the extraction set (difference-in-means)
-2. Select best layer by maximizing AUC on the VALIDATION set
+2. Select best layer by maximizing AUC on the VALIDATION set (NOT extraction set)
 3. Calibrate threshold on the validation set (maximize balanced accuracy)
 4. Report all metrics on the test set only
 
 Result: layer 26 for Qwen2.5-1.5B-Instruct. The exact layer may vary by +/-1 due to hardware/driver non-determinism.
+
+## Tier Taxonomy
+
+- **Tier A**: Direct (unformatted baseline)
+- **Tier B**: Generic structural formats (JSON, XML, YAML, OpenAI-style non-native)
+- **Tier C**: Agentic-format conditions with model-native special tokens (system `<|im_start|>`, tool_call `<tool_call>`) plus MCP JSON-RPC (included as an agentic protocol condition, not as evidence of Qwen training exposure)
 
 ## Serialization
 
@@ -147,7 +157,7 @@ tokenizer(prompt, return_tensors='pt', truncation=True, max_length=128)
 All open-weight experiments run on a single GPU with 10GB+ VRAM (tested on RTX 3080).
 - Core reproduction (`reproduce.py`): ~6 minutes
 - Full primary model + cross-model (`run_ieee_cars_experiments.py`): ~2 hours
-- Multi-seed fine-tuning (`run_multiseed_ft.py`): ~6 GPU-hours
+- Multi-seed fine-tuning (`run_multiseed_ft_v2.py`): ~6 GPU-hours
 
 ## Citation
 
@@ -168,6 +178,8 @@ All open-weight experiments run on a single GPU with 10GB+ VRAM (tested on RTX 3
 - Fine-tuning experiments at 135M scale only (SmolLM2-135M-Instruct)
 - Near-perfect within-format AUC partially reflects clearly separable prompt sets
 - Causal claims are evidence-supported via activation patching, not definitively established
+- Ablation is not strictly monotonic (bracket delimiters > key-value pairs in retention)
+- SAE analysis is exploratory (160 vectors, 19 features, single training run)
 - GPU non-determinism may cause +/-0.5% variation in retention values across hardware
 
 ## License

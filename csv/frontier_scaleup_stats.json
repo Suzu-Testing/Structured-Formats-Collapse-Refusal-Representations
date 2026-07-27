@@ -1,0 +1,12 @@
+{
+  "direct_refusal_rate": 0.7333333333333333,
+  "format_refusal_rate": 0.5666666666666667,
+  "refusal_drop": 0.16666666666666663,
+  "mcnemar_p": 0.18242243945173586,
+  "cohens_h": 0.3517865328856493,
+  "ci_95_low": -0.033333333333333326,
+  "ci_95_high": 0.3666666666666667,
+  "n_paired": 30,
+  "refused_direct_complied_format": 7,
+  "complied_direct_refused_format": 2
+}
