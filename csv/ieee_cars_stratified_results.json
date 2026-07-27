@@ -162,11 +162,11 @@
       "tool_call": 6.45703125,
       "system": 3.498046875
     },
-    "Qwen2.5-3B (4-bit)": {
+    "Qwen2.5-3B": {
       "direct": 100.0,
-      "json": -1,
-      "tool_call": -1,
-      "system": -1
+      "json": 27.3,
+      "tool_call": 10.4,
+      "system": 6.5
     },
     "TinyLlama-1.1B": {
       "direct": 100.0,

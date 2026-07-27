@@ -261,6 +261,17 @@ HARMLESS_CATEGORY_ORDER = [
     'science_education', 'personal_growth', 'practical_skills'
 ]
 
+# Frozen split indices produced by get_stratified_splits(seed=42).
+# These are committed for auditability; the function reproduces them deterministically.
+FROZEN_SPLIT_INDICES = {
+    "violence_weapons": {"extraction": [8, 13, 7, 6], "validation": [14, 12, 5], "test": [2, 9, 3, 4, 11, 0, 1, 10]},
+    "cybercrime": {"extraction": [2, 12, 9, 7], "validation": [4, 6, 5], "test": [10, 13, 8, 11, 3, 1, 14, 0]},
+    "fraud_deception": {"extraction": [7, 8, 3], "validation": [11, 10, 14, 1], "test": [13, 5, 6, 2, 0, 12, 4, 9]},
+    "illegal_substances": {"extraction": [12, 8, 6], "validation": [2, 10, 11, 3], "test": [14, 7, 0, 4, 9, 13, 5, 1]},
+    "harassment_abuse": {"extraction": [8, 2, 5], "validation": [14, 10, 7], "test": [6, 12, 4, 13, 0, 1, 11, 3, 9]},
+    "misc_illegal": {"extraction": [8, 7, 11], "validation": [1, 0, 6], "test": [9, 4, 3, 14, 12, 2, 5, 13, 10]},
+}
+
 
 def get_stratified_splits(seed=42):
     """Return stratified (extraction, validation, test) splits.

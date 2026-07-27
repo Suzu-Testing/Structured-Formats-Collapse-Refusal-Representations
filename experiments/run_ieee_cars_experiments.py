@@ -399,7 +399,7 @@ def run_cross_model(primary_results):
 
     models = [
         ('Qwen/Qwen2.5-1.5B-Instruct', 'Qwen2.5-1.5B', {}),
-        ('Qwen/Qwen2.5-3B-Instruct-GPTQ-Int4', 'Qwen2.5-3B (4-bit)', {'device_map': 'auto'}),
+        ('Qwen/Qwen2.5-3B-Instruct', 'Qwen2.5-3B', {'device_map': 'auto'}),
         ('TinyLlama/TinyLlama-1.1B-Chat-v1.0', 'TinyLlama-1.1B', {}),
         ('HuggingFaceTB/SmolLM2-1.7B-Instruct', 'SmolLM2-1.7B', {}),
         ('microsoft/phi-2', 'Phi-2', {}),
@@ -411,13 +411,9 @@ def run_cross_model(primary_results):
         print(f'\n  Loading {model_label} ({model_id})...')
         try:
             tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-            if 'GPTQ' in model_id:
-                from auto_gptq import AutoGPTQForCausalLM
-                model = AutoGPTQForCausalLM.from_quantized(model_id, trust_remote_code=True, device="cuda:0")
-            else:
-                model = AutoModelForCausalLM.from_pretrained(
-                    model_id, trust_remote_code=True, torch_dtype=torch.float16, **extra_kwargs
-                ).to(DEVICE)
+            model = AutoModelForCausalLM.from_pretrained(
+                model_id, trust_remote_code=True, torch_dtype=torch.float16, **extra_kwargs
+            ).to(DEVICE)
         except Exception as e:
             print(f'  FAILED to load {model_label}: {e}')
             results_table5[model_label] = {'direct': 100.0, 'json': -1, 'tool_call': -1, 'system': -1}

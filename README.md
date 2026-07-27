@@ -36,9 +36,10 @@ experiments/                             All experiment scripts
   exp_path_patching.py                  Component-level patching (attention/MLP)
   exp_attention_head_routing.py         Layer-0 attention head analysis
   exp_sae_intervention.py              SAE feature decomposition + intervention
+  frontier_evaluation.py                Canonical frontier script (GPT-4o, Gemini, Claude)
   exp_frontier_v3.py                    GPT-4o behavioral evaluation (N=50)
   exp_multivendor_frontier.py           Claude + Gemini evaluation
-  exp_cross_arch_ablation.py            Cross-architecture (legacy, uses GPTQ)
+  exp_cross_arch_ablation.py            Cross-architecture ablation (legacy)
 csv/                                    Frozen experiment results
   ieee_cars_stratified_results.json     Primary model results (Tables I-IV)
   exp_multiseed_ft.csv                  Training results (5 seeds x 2 conditions x 5 formats)
