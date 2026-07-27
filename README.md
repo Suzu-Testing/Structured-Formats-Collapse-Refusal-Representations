@@ -17,7 +17,8 @@ Key results (Qwen2.5-1.5B-Instruct, layer 26, N=50 test pairs):
 - System format effect concentrated in Layer 0 (90.8% restoration from L0 alone)
 - Tool_call patching is non-monotonic early, consistent with distributed processing across layers 0-18
 - GPT-4o refusal drops from 86% to 30% (N=50, p < 10^-7) under user-message format wrapping
-- Five-seed format-diverse training (matched volume, 410 seq/condition): tool-call refusal rises from 24% to 99%
+- Claude tool_result reduces hard refusal from 34% to 12% (N=50, p=0.019)
+- Five-seed format-diverse training (matched volume, 410 seq/condition): tool-call refusal rises from 46% to 95%
 
 ## Repository Structure
 
@@ -38,6 +39,9 @@ experiments/                             All experiment scripts
   exp_attention_head_routing.py         Layer-0 attention head analysis
   exp_sae_intervention.py              SAE (160 vectors, 19 features, exploratory)
   frontier_evaluation.py                Canonical frontier script (GPT-4o, Gemini, Claude)
+  run_frontier_final_v2.py             Gemini native protocol (google.genai SDK)
+  run_frontier_final_v3.py             Gemini with agentic prompts
+  analyze_claude.py                    Claude stats (strict binary rubric)
   exp_frontier_v3.py                    GPT-4o behavioral evaluation (N=50)
   exp_multivendor_frontier.py           Claude + Gemini evaluation
   exp_cross_arch_ablation.py            Cross-architecture ablation
@@ -50,9 +54,10 @@ csv/                                    Frozen experiment results
   exp_path_patching.csv                 Component-level patching
   exp_attention_head_routing.csv        Attention head routing
   exp_sae_intervention.csv              SAE intervention
-  exp_frontier_v3_gpt_4o.csv            GPT-4o evaluation outcomes (N=50)
-  exp_frontier_scaleup.csv             Gemini 2.5 Flash outcomes (N=30+30)
-  exp_multivendor_claude.csv           Claude Sonnet 4 outcomes (N=50)
+  exp_frontier_v3_gpt_4o.csv            GPT-4o outcomes (N=50, verified)
+  exp_multivendor_claude.csv           Claude Sonnet 4 outcomes (N=50, verified)
+  exp_frontier_final_gemini_native.csv Gemini native protocol (N=20, verified)
+  exp_frontier_scaleup.csv             Gemini older run (N=30+30, supplementary)
 frontier/                               Frontier model evaluation summary
   analysis.py                          Read CSVs and verify statistics vs paper
   prompt_outcomes.csv                   Prompt-level classifications (no response bodies)
@@ -105,10 +110,10 @@ All open-weight models loaded in FP16 (no quantization):
 | Phi-2 (control) | 2.7B | `microsoft/phi-2` |
 | SmolLM2-135M-Instruct | 135M | `HuggingFaceTB/SmolLM2-135M-Instruct` (fine-tuning only) |
 
-Frontier models (evaluated June 2026):
-- GPT-4o (2024-08-06) via OpenAI API (N=50)
-- Gemini 2.5 Flash via Google AI API (N=20)
-- Claude Sonnet 4 via Anthropic API (N=20)
+Frontier models (evaluated June-July 2026):
+- GPT-4o (`gpt-4o-2024-08-06`) via OpenAI API (N=50, user-message wrapping)
+- Claude Sonnet 4 (`claude-sonnet-4-6`) via Anthropic API (N=50, native tool_result)
+- Gemini 2.5 Flash via google.genai SDK (N=20, native FunctionResponse)
 
 ## Prompt Dataset
 
