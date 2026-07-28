@@ -14,10 +14,9 @@ Key results (Qwen2.5-1.5B-Instruct, layer 26, N=50 test pairs):
 - Tier B formats (generic structure) retain 17-45%
 - Within-format AUC remains >= 0.978: separability is preserved but the threshold shifts
 - Removing format tokens generally restores the gap; bracket and key-value controls do not form a uniquely ordered sequence
-- System format effect concentrated in Layer 0 (90.8% restoration from L0 alone)
-- Tool_call patching is non-monotonic early, consistent with distributed processing across layers 0-18
-- GPT-4o refusal drops from 86% to 30% (N=50, p < 10^-7) under user-message format wrapping
-- Claude tool_result reduces hard refusal from 34% to 12% (N=50, p=0.019)
+- System format: Layer-0 attention-only patching restores 81.7%, MLP-only restores 42.6%
+- Tool_call Layer-0 attention patching: 50.7% (not negligible); distributed across layers 0-18
+- Behavioral framing stress tests: GPT-4o 86%->30% (N=50, p < 10^-7), Claude 34%->12% (N=50, p=0.019)
 - Five-seed format-diverse training (matched volume, 410 seq/condition): tool-call refusal rises from 46% to 95%
 
 ## Repository Structure
@@ -41,7 +40,7 @@ experiments/                             All experiment scripts
   frontier_evaluation.py                Canonical frontier script (GPT-4o, Gemini, Claude)
   run_frontier_final_v2.py             Gemini native protocol (google.genai SDK)
   run_frontier_final_v3.py             Gemini with agentic prompts
-  analyze_claude.py                    Claude stats (strict binary rubric)
+  analyze_claude.py                    Claude stats (automated heuristic)
   exp_frontier_v3.py                    GPT-4o behavioral evaluation (N=50)
   exp_multivendor_frontier.py           Claude + Gemini evaluation
   exp_cross_arch_ablation.py            Cross-architecture ablation
@@ -55,13 +54,13 @@ csv/                                    Frozen experiment results
   exp_attention_head_routing.csv        Attention head routing
   exp_sae_intervention.csv              SAE intervention
   exp_frontier_v3_gpt_4o.csv            GPT-4o outcomes (N=50, verified)
-  exp_multivendor_claude.csv           Claude Sonnet 4 outcomes (N=50, verified)
+  exp_multivendor_claude.csv           Claude Sonnet 4.6 outcomes (N=50, verified)
   exp_frontier_final_gemini_native.csv Gemini native protocol (N=20, verified)
   exp_frontier_scaleup.csv             Gemini older run (N=30+30, supplementary)
 frontier/                               Frontier model evaluation summary
   analysis.py                          Read CSVs and verify statistics vs paper
   prompt_outcomes.csv                   Prompt-level classifications (no response bodies)
-  README.md                             Frontier evaluation protocol + known discrepancies
+  README.md                             Frontier evaluation protocol
 reproduce.py                            Core reproduction pipeline (~6 min on RTX 3080)
 requirements.txt                        Dependencies
 preregistration.py                      Frozen experimental parameters
@@ -95,11 +94,11 @@ python experiments/run_ieee_cars_experiments.py
 ## What Is NOT Included
 
 - **Frontier API evaluation** requires API keys for OpenAI, Google, and Anthropic. Scripts are in `experiments/`; prompt-level outcome classifications are in `frontier/prompt_outcomes.csv`. Raw response bodies are not distributed due to provider terms of service.
-- **Full multi-seed fine-tuning** (5 seeds x 2 conditions x 5 formats, matched volume at 410 sequences per condition) takes ~6 GPU-hours. Raw results are in `csv/exp_multiseed_ft_v2.csv`; the training script is `experiments/run_multiseed_ft_v2.py`.
+- **Full multi-seed fine-tuning** (5 seeds x 2 conditions x 5 formats, matched volume at 410 sequences per condition, float32 with mixed-precision) takes ~6 GPU-hours. Raw results are in `csv/exp_multiseed_ft_v2.csv`; the training script is `experiments/run_multiseed_ft_v2.py`.
 
 ## Models
 
-All open-weight models loaded in FP16 (no quantization):
+All open-weight mechanistic models loaded in FP16 (no quantization). Fine-tuning uses float32 with mixed-precision.
 
 | Model | Parameters | HuggingFace ID |
 |-------|-----------|----------------|
@@ -110,10 +109,12 @@ All open-weight models loaded in FP16 (no quantization):
 | Phi-2 (control) | 2.7B | `microsoft/phi-2` |
 | SmolLM2-135M-Instruct | 135M | `HuggingFaceTB/SmolLM2-135M-Instruct` (fine-tuning only) |
 
-Frontier models (evaluated June-July 2026):
-- GPT-4o (`gpt-4o-2024-08-06`) via OpenAI API (N=50, user-message wrapping)
-- Claude Sonnet 4 (`claude-sonnet-4-6`) via Anthropic API (N=50, native tool_result)
-- Gemini 2.5 Flash via google.genai SDK (N=20, native FunctionResponse)
+Frontier models (behavioral framing stress tests, June-July 2026):
+- GPT-4o (`gpt-4o` rolling alias) via OpenAI API (N=50, authorized-context user-message framing)
+- Claude Sonnet 4.6 (`claude-sonnet-4-6`, active pinned) via Anthropic API (N=50, tool-output text in user msg)
+- Gemini 2.5 Flash (`gemini-2.5-flash` stable ID) via google.genai SDK (N=20, native FunctionResponse + instruction preamble)
+
+Cross-model (Table V): Qwen2.5-3B uses N=30 pairs; all others use N=50.
 
 ## Prompt Dataset
 
@@ -179,7 +180,8 @@ All open-weight experiments run on a single GPU with 10GB+ VRAM (tested on RTX 3
 ## Limitations
 
 - Mechanistic analysis limited to 1.1-3B parameter models (5 architectures)
-- Frontier models (GPT-4o, Gemini 2.5 Flash, Claude Sonnet 4) evaluated behaviorally only via API
+- Frontier evaluations are behavioral framing stress tests (conditions conflate format with instructional framing); not causal proof that format alone produced the effect
+- Frontier classification uses automated heuristic (length < 80 chars + keyword matching), not manual review
 - Fine-tuning experiments at 135M scale only (SmolLM2-135M-Instruct)
 - Near-perfect within-format AUC partially reflects clearly separable prompt sets
 - Causal claims are evidence-supported via activation patching, not definitively established
