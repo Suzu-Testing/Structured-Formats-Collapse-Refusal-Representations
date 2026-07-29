@@ -16,7 +16,7 @@ Expected paper values (IEEE CARS 2026):
 import os
 import pandas as pd
 import numpy as np
-from scipy.stats import binom_test
+from scipy.stats import binomtest
 
 CSV_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'csv')
 
@@ -77,7 +77,7 @@ def main():
 
     # Exact McNemar (binomial test on discordant pairs)
     if b + c > 0:
-        p_value = binom_test(min(b, c), b + c, 0.5)
+        p_value = binomtest(min(b, c), b + c, 0.5).pvalue
     else:
         p_value = 1.0
 

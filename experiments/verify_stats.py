@@ -20,7 +20,7 @@ for fmt in tier_c_formats:
 
 print(f"\nReduction range: {100 - max(results['table1'][f]['retention'] for f in tier_c_formats):.1f}% to {100 - min(results['table1'][f]['retention'] for f in tier_c_formats):.1f}%")
 
-# Ablation monotonicity check (reordered)
+# Ablation correlation (reordered by increasing structure; NOT claimed as strict monotonic in paper)
 ablation_order = ['full_tool_call', 'json_braces', 'brackets', 'kv_pairs', 'prefix', 'direct']
 ablation_rets = [results['table2'][s]['retention'] for s in ablation_order]
 print(f"\nAblation (reordered): {[f'{r:.1f}' for r in ablation_rets]}")

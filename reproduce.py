@@ -59,8 +59,8 @@ EXPECTED = {
         'json': {'auc': 0.988, 'acc': 92.0},
     },
     'table4': {
-        'tool_call': {0: 17.9, 6: 6.8, 12: 65.9, 18: 93.3, 24: 112.5, 26: 113.0},
-        'system': {0: 90.8, 6: 100.5, 12: 103.8, 18: 112.2, 24: 106.2, 26: 108.9},
+        'tool_call': {0: -3.4, 6: -9.9, 12: 50.1, 18: 80.4, 24: 100.0, 26: 100.0},
+        'system': {0: 77.1, 6: 88.8, 12: 93.0, 18: 103.4, 24: 97.2, 26: 97.2},
     },
 }
 
@@ -424,7 +424,7 @@ def main():
                 for hook in hooks:
                     hook.remove()
 
-                patched_proj = patched_out.hidden_states[best_layer + 1][0, -1, :].cpu().numpy()
+                patched_proj = patched_out.hidden_states[best_layer][0, -1, :].cpu().numpy()
                 patched_proj = float(np.dot(patched_proj, direction))
 
                 denom = direct_proj - formatted_proj

@@ -31,8 +31,8 @@ def get_hidden_states(prompts, max_length=128):
 print('Extracting direction...')
 h_states = get_hidden_states(EXT_H)
 l_states = get_hidden_states(EXT_L)
-h_mean = np.mean([s[TARGET_LAYER + 1] for s in h_states], axis=0)
-l_mean = np.mean([s[TARGET_LAYER + 1] for s in l_states], axis=0)
+h_mean = np.mean([s[TARGET_LAYER] for s in h_states], axis=0)
+l_mean = np.mean([s[TARGET_LAYER] for s in l_states], axis=0)
 direction = h_mean - l_mean
 direction = direction / (np.linalg.norm(direction) + 1e-10)
 
@@ -57,10 +57,10 @@ for fmt_name, fmt_fn in FORMATS.items():
         
         with torch.no_grad():
             d_out = model(**d_inputs, output_hidden_states=True)
-            direct_proj = float(np.dot(d_out.hidden_states[TARGET_LAYER + 1][0, -1, :].cpu().numpy(), direction))
+            direct_proj = float(np.dot(d_out.hidden_states[TARGET_LAYER][0, -1, :].cpu().numpy(), direction))
             
             f_out = model(**f_inputs, output_hidden_states=True)
-            formatted_proj = float(np.dot(f_out.hidden_states[TARGET_LAYER + 1][0, -1, :].cpu().numpy(), direction))
+            formatted_proj = float(np.dot(f_out.hidden_states[TARGET_LAYER][0, -1, :].cpu().numpy(), direction))
         
         # Attention-only patching at Layer 0
         # We need to capture the attention output from the direct pass and inject it into the formatted pass
@@ -87,7 +87,7 @@ for fmt_name, fmt_fn in FORMATS.items():
             patched_out = model(**f_inputs, output_hidden_states=True)
         hook.remove()
         
-        patched_proj = float(np.dot(patched_out.hidden_states[TARGET_LAYER + 1][0, -1, :].cpu().numpy(), direction))
+        patched_proj = float(np.dot(patched_out.hidden_states[TARGET_LAYER][0, -1, :].cpu().numpy(), direction))
         
         denom = direct_proj - formatted_proj
         if abs(denom) > 1e-8:
@@ -116,7 +116,7 @@ for fmt_name, fmt_fn in FORMATS.items():
             patched_out = model(**f_inputs, output_hidden_states=True)
         hook.remove()
         
-        patched_proj = float(np.dot(patched_out.hidden_states[TARGET_LAYER + 1][0, -1, :].cpu().numpy(), direction))
+        patched_proj = float(np.dot(patched_out.hidden_states[TARGET_LAYER][0, -1, :].cpu().numpy(), direction))
         
         if abs(denom) > 1e-8:
             mlp_restorations.append((patched_proj - formatted_proj) / denom * 100)

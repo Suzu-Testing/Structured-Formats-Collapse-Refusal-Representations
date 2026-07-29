@@ -32,12 +32,12 @@ def strict_binary(classification):
 
 def mcnemar_exact(direct_binary, format_binary):
     """Exact McNemar's test (binomial) on paired binary outcomes."""
-    from scipy.stats import binom_test
+    from scipy.stats import binomtest
     assert len(direct_binary) == len(format_binary)
     b = sum(1 for d, f in zip(direct_binary, format_binary) if d == 1 and f == 0)
     c = sum(1 for d, f in zip(direct_binary, format_binary) if d == 0 and f == 1)
     if b + c > 0:
-        p = binom_test(min(b, c), b + c, 0.5)
+        p = binomtest(min(b, c), b + c, 0.5).pvalue
     else:
         p = 1.0
     return b, c, p

@@ -356,7 +356,7 @@ def run_primary_model():
                 for hook in hooks:
                     hook.remove()
 
-                patched_proj = patched_out.hidden_states[best_layer + 1][0, -1, :].cpu().numpy()
+                patched_proj = patched_out.hidden_states[best_layer][0, -1, :].cpu().numpy()
                 patched_proj = float(np.dot(patched_proj, direction))
 
                 denom = direct_proj - formatted_proj

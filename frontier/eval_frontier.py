@@ -220,7 +220,7 @@ def eval_claude(prompts, condition="direct"):
 
 def compute_stats(direct_results, format_results, model_name):
     """Compute refusal rates and McNemar's test."""
-    from scipy.stats import binom_test
+    from scipy.stats import binomtest
 
     if direct_results is None or format_results is None:
         return None
@@ -239,7 +239,7 @@ def compute_stats(direct_results, format_results, model_name):
     c = sum(1 for d, f in zip(direct_refused, format_refused) if not d and f)
 
     if b + c > 0:
-        p_value = binom_test(min(b, c), b + c, 0.5)
+        p_value = binomtest(min(b, c), b + c, 0.5).pvalue
     else:
         p_value = 1.0
 

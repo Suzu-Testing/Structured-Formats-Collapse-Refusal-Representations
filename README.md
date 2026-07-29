@@ -14,8 +14,9 @@ Key results (Qwen2.5-1.5B-Instruct, layer 26, N=50 test pairs):
 - Tier B formats (generic structure) retain 17-45%
 - Within-format AUC remains >= 0.978: separability is preserved but the threshold shifts
 - Removing format tokens generally restores the gap; bracket and key-value controls do not form a uniquely ordered sequence
-- System format: Layer-0 attention-only patching restores 81.7%, MLP-only restores 42.6%
-- Tool_call Layer-0 attention patching: 50.7% (not negligible); distributed across layers 0-18
+- System format concentrates at Layer 0: attention-only restores 79.0%, MLP-only restores 26.9%
+- Tool_call Layer-0 is negligible (-4.2%, noise); tool_call processing distributes across layers 12-24
+- Layer-0 attention routing divergence (tool_call): mean L1 = 0.99 (does NOT causally produce the shift)
 - Behavioral framing stress tests: GPT-4o 86%->30% (N=50, p < 10^-7), Claude 34%->12% (N=50, p=0.019)
 - Five-seed format-diverse training (matched volume, 410 seq/condition): tool-call refusal rises from 46% to 95%
 
@@ -29,7 +30,9 @@ experiments/                             All experiment scripts
   run_qwen3b.py                         Qwen2.5-3B cross-model (FP16)
   run_multiseed_ft_v2.py                Matched-volume fine-tuning (Table IX, 410 seq/cond)
   run_multiseed_ft.py                   (deprecated: unmatched-volume version)
-  verify_component_patching.py          Component-level analysis
+  rerun_patching_fixed.py              Corrected patching + component (bug fix)
+  rerun_routing_divergence.py          Attention routing (eager attn)
+  verify_component_patching.py          Component-level analysis (original)
   verify_meanpool.py                    Mean-pooled readout comparison
   verify_stats.py                       Statistical verification
   exp_safety_invariance.py              Core shared utilities
@@ -45,7 +48,8 @@ experiments/                             All experiment scripts
   exp_multivendor_frontier.py           Claude + Gemini evaluation
   exp_cross_arch_ablation.py            Cross-architecture ablation
 csv/                                    Frozen experiment results
-  ieee_cars_stratified_results.json     Primary model results (Tables I-IV)
+  ieee_cars_stratified_results.json     Primary model results (Tables I-III, V)
+  patching_fixed_results.json          Corrected Table IV + component values
   exp_multiseed_ft_v2.csv               Matched-volume training results (5 seeds x 2 cond x 5 fmt)
   exp_multiseed_ft.csv                  (deprecated: unmatched-volume training)
   exp_cross_arch_ablation.csv           Cross-architecture ablation
@@ -110,8 +114,8 @@ All open-weight mechanistic models loaded in FP16 (no quantization). Fine-tuning
 | SmolLM2-135M-Instruct | 135M | `HuggingFaceTB/SmolLM2-135M-Instruct` (fine-tuning only) |
 
 Frontier models (behavioral framing stress tests, June-July 2026):
-- GPT-4o (`gpt-4o` rolling alias) via OpenAI API (N=50, authorized-context user-message framing)
-- Claude Sonnet 4.6 (`claude-sonnet-4-6`, active pinned) via Anthropic API (N=50, tool-output text in user msg)
+- GPT-4o (`gpt-4o` rolling alias) via OpenAI API (N=50, authorized red-team context in user message; no native tool role or structured wrapper)
+- Claude Sonnet 4.6 (`claude-sonnet-4-6`, active pinned) via Anthropic API (N=50, tool-output text in user msg; NOT native tool_result)
 - Gemini 2.5 Flash (`gemini-2.5-flash` stable ID) via google.genai SDK (N=20, native FunctionResponse + instruction preamble)
 
 Cross-model (Table V): Qwen2.5-3B uses N=30 pairs; all others use N=50.

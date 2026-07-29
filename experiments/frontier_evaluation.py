@@ -384,7 +384,7 @@ def run_claude(n_prompts=50, delay=1.0):
 
 def analyze_results(df, model_name):
     """McNemar's test on paired binary outcomes."""
-    from scipy.stats import binom_test
+    from scipy.stats import binomtest
 
     direct = df[df['format'].isin(['direct'])]
     formatted = df[~df['format'].isin(['direct'])]
@@ -409,7 +409,7 @@ def analyze_results(df, model_name):
     b = n_only_direct
     c = n_only_format
     if b + c > 0:
-        p_value = binom_test(min(b, c), b + c, 0.5) * 2  # two-sided
+        p_value = binomtest(min(b, c), b + c, 0.5).pvalue
     else:
         p_value = 1.0
 

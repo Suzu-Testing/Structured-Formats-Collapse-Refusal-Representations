@@ -1,6 +1,6 @@
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
-% IEEE CARS 2026 v3 — margin fix for EDAS compliance
+% IEEE CARS 2026 v3 - margin fix for EDAS compliance
 \addtolength{\topmargin}{0.02in}
 \addtolength{\textheight}{-0.02in}
 
@@ -15,6 +15,7 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage{url}
 \usepackage{microtype}
+\usepackage{flushend}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
@@ -32,7 +33,7 @@ jacob@suzulabs.com}}
 \maketitle
 
 \begin{abstract}
-Large language models deployed as autonomous agents communicate through structured formats: tool calls, function results, and system prompts. We find that the evaluated agentic-format conditions reduce the refusal-direction projection gap by 91--97\% relative to direct prompts, while harmful and harmless inputs remain highly separable within each format (AUC $\geq$ 0.978). A linear probe threshold calibrated on direct prompts fails to transfer to the tool\_call format, dropping to near-chance accuracy (52\%) despite within-format AUC of 0.990. The shift replicates across four instruction-tuned models spanning three model families (1.1--3B parameters), with a similar representational-geometric effect in a Phi-2 control. On the primary model, format-token ablation, activation patching, and sparse autoencoder intervention provide converging evidence that learned format and special tokens contribute substantially to the shift. Behavioral validation on three frontier systems shows format-dependent refusal reduction in all cases: GPT-4o drops from 86\% to 30\% under structured format wrapping (N=50, $p < 10^{-7}$), Claude Sonnet 4 from 34\% to 12\% through its native tool-result protocol (N=50, $p = 0.019$), and Gemini 2.5 Flash from 95\% to 85\% through native function-response (N=20, directionally consistent). The magnitude varies with each model's safety calibration around its native tool channel. In a controlled proof-of-concept experiment, format-diverse safety training stabilized tool-call refusal across five random seeds (95\% $\pm$ 4 vs.\ 46\% $\pm$ 34 under direct-only training, N=40 per format), collapsing per-seed variance from a 5--83\% range to a consistent 90--100\%.
+Large language models deployed as autonomous agents communicate through structured formats: tool calls, function results, and system prompts. We find that the evaluated agentic-format conditions reduce the refusal-direction projection gap by 91--97\% relative to direct prompts, while harmful and harmless inputs remain highly separable within each format (AUC $\geq$ 0.978). A linear probe threshold calibrated on direct prompts fails to transfer to the tool\_call format, dropping to near-chance accuracy (52\%) despite within-format AUC of 0.990. The shift replicates across four instruction-tuned models spanning three model families (1.1--3B parameters), with a similar representational-geometric effect in a Phi-2 control. On the primary model, format-token ablation and cumulative activation patching, together with an exploratory sparse-autoencoder intervention, provide converging evidence that learned format and special tokens contribute substantially to the shift; system-token processing concentrates at Layer~0 while tool-call processing distributes across mid-to-late layers. Behavioral validation on three frontier systems shows refusal reduction under model-specific framing conditions: GPT-4o drops from 86\% to 30\% under authorized-context user-message framing (N=50, $p < 10^{-7}$), Claude Sonnet 4.6 from 34\% to 12\% through tool-output text wrapping (N=50, $p = 0.019$), and Gemini 2.5 Flash from 95\% to 85\% through native function-response (N=20, not significant). The effect reaches statistical significance for GPT-4o and Claude but not Gemini. In a controlled proof-of-concept experiment, format-diverse safety training stabilized tool-call refusal across five random seeds (95\% $\pm$ 4 vs.\ 46\% $\pm$ 34 under direct-only training, N=40 per format), collapsing per-seed variance from a 5--83\% range to a consistent 90--100\%.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -41,34 +42,34 @@ AI safety, large language models, adversarial machine learning, agentic systems,
 
 \section{Introduction}
 
-Large language models are increasingly deployed as \emph{agents}: systems that call tools, execute functions, communicate via structured protocols (JSON-RPC, MCP), and process system-level instructions \cite{schick2023toolformer, patil2023gorilla, qin2023toolllm}. This requires models to reliably parse and obey structured format instructions. Simultaneously, these models are safety-trained to \emph{refuse} harmful requests \cite{bai2022training, ouyang2022training}, with mechanisms including the rank-1 refusal direction \cite{arditi2024refusal} operating on residual-stream representations.
+Large language models are increasingly deployed as \emph{agents}: systems that call tools, execute functions, and communicate via structured protocols (JSON-RPC, MCP) \cite{schick2023toolformer, patil2023gorilla, qin2023toolllm}. This requires reliable parsing of structured format instructions. Simultaneously, these models are safety-trained to \emph{refuse} harmful requests \cite{bai2022training, ouyang2022training}, with mechanisms including the rank-1 refusal direction \cite{arditi2024refusal} operating on residual-stream representations.
 
 We identify a representational conflict: \textbf{structured format and special tokens induce calibration shifts in refusal-related representations, shifting refusal-direction projections sufficiently that a linear probe threshold calibrated on direct prompts fails to transfer to formatted prompts.} Harmful and harmless inputs remain separable within each format (high AUC), but the decision threshold shifts by up to 1.6 units across formats.
 
 \subsection{Contributions}
 
 \begin{enumerate}
-    \item Special-token-conditioned inputs shift refusal-related representations, reducing the refusal-direction gap by 91--97\% under agentic-format conditions relative to direct prompts (\S\ref{sec:results}).
-    \item Layer-0 attention accounts for a substantial fraction of projection restoration in the primary model; format-token ablation restores the gap monotonically, and the gap reduction replicates across four instruction-tuned models plus a Phi-2 representational control (\S\ref{sec:ablation}, \S\ref{sec:cross_model}, \S\ref{sec:pathway}).
-    \item Analogous structured-format conditions reduce behavioral refusal in all three tested frontier systems: GPT-4o (56pp drop, $p < 10^{-7}$), Claude Sonnet 4 (22pp, $p = 0.019$), and Gemini 2.5 Flash (10pp, directionally consistent) (\S\ref{sec:frontier}).
+    \item Evaluated agentic-format inputs shift refusal-related representations, reducing the refusal-direction gap by 91--97\% relative to direct prompts; the strongest shifts occur for conditions containing model-native special tokens (\S\ref{sec:results}).
+    \item Cumulative activation patching localizes system-token processing to Layer~0 (77\% restoration) while tool\_call processing distributes across layers 12--24; format-token ablation generally restores the gap, with token-identity and length controls supporting a contribution from structural syntax and native token identity. The gap reduction replicates across four instruction-tuned models plus a Phi-2 representational control (\S\ref{sec:ablation}, \S\ref{sec:cross_model}, \S\ref{sec:pathway}).
+    \item Behavioral framing stress tests on three frontier systems show reduced refusal under model-specific framing conditions, reaching significance for GPT-4o (56pp, $p < 10^{-7}$) and Claude Sonnet 4.6 (22pp, $p = 0.019$) but not Gemini (10pp, $p = 0.50$) (\S\ref{sec:frontier}).
     \item Format-diverse safety training mitigates the failure in a controlled multi-seed proof of concept (\S\ref{sec:training}).
 \end{enumerate}
 
 \subsection{Threat Model}
 
-We consider an attacker who can influence the content of a tool response or structured message consumed by an LLM agent. The attacker controls content delivered through a structured format channel (e.g., a compromised API returning tool results) but does not control the agent's system prompt or have direct model access. If behavioral refusal is reduced by format-conditioned inputs, harmful instructions embedded in tool responses may elicit non-refusal and influence downstream agent actions. This threat is relevant when: (a) model responses trigger security-sensitive actions, (b) tool outputs are not independently validated, and (c) the model lacks format-invariant safety classifiers.
+We consider an attacker who can influence tool-response content consumed by an LLM agent (e.g., a compromised API returning tool results) but does not control the system prompt or have direct model access. If behavioral refusal is reduced by format-conditioned inputs, harmful instructions in tool responses may elicit compliance and influence downstream actions. This threat applies when: (a) model responses trigger security-sensitive actions, (b) tool outputs lack independent validation, and (c) no format-invariant safety classifier is present.
 
 \section{Related Work}
 
-\textbf{Refusal representations.} Arditi et al.\ \cite{arditi2024refusal} showed refusal is mediated by a rank-1 direction extractable via difference-in-means; Li et al.\ \cite{li2024inference} identified similar directions for inference-time intervention. Rimsky et al.\ \cite{rimsky2024steering} demonstrated contrastive activation addition for behavioral steering. Representation engineering more broadly \cite{zou2023representation} enables reading and writing model concepts. We extend this line by showing the refusal direction exhibits format-dependent calibration shifts.
+\textbf{Refusal representations.} Arditi et al.\ \cite{arditi2024refusal} showed refusal is mediated by a rank-1 direction; Li et al.\ \cite{li2024inference} identified similar directions for inference-time intervention; Rimsky et al.\ \cite{rimsky2024steering} demonstrated contrastive activation addition. Representation engineering \cite{zou2023representation} enables reading and writing model concepts. We extend this line by showing the refusal direction exhibits format-dependent calibration shifts.
 
-\textbf{Tool-augmented LLMs and agent security.} Toolformer \cite{schick2023toolformer}, Gorilla \cite{patil2023gorilla}, and ToolLLM \cite{qin2023toolllm} require parsing structured instructions \cite{openai2023function}. Greshake et al.\ \cite{greshake2023indirect} formalized indirect prompt injection through tool outputs. Wallace et al.\ \cite{wallace2024instruction} proposed instruction hierarchy for privilege separation. Yi et al.\ \cite{yi2023benchmarking} evaluated agent-specific vulnerabilities. We provide representational evidence for why tool-formatted content may bypass safety: the format itself shifts the activation distribution.
+\textbf{Tool-augmented LLMs and agent security.} Toolformer \cite{schick2023toolformer}, Gorilla \cite{patil2023gorilla}, and ToolLLM \cite{qin2023toolllm} require parsing structured instructions \cite{openai2023function}. Greshake et al.\ \cite{greshake2023indirect} formalized indirect prompt injection; Wallace et al.\ \cite{wallace2024instruction} proposed instruction hierarchy; Yi et al.\ \cite{yi2023benchmarking} evaluated agent vulnerabilities. We provide representational evidence for why tool-formatted content may bypass safety.
 
-\textbf{Adversarial attacks on LLM safety.} Universal suffixes \cite{zou2023universal}, jailbreak taxonomies \cite{wei2024jailbroken}, Policy Puppetry \cite{mccauley2025policy}, cipher-based attacks \cite{yuan2024gpt}, AutoDAN \cite{liu2024autodan}, and structured-output exploits \cite{pelrine2023exploiting} demonstrate diverse failure modes. Our work identifies a candidate representational mechanism underlying format-based attacks: early-layer attention routing produces calibration shifts associated with early-layer format processing.
+\textbf{Adversarial attacks.} Universal suffixes \cite{zou2023universal}, jailbreak taxonomies \cite{wei2024jailbroken}, Policy Puppetry \cite{mccauley2025policy}, cipher attacks \cite{yuan2024gpt}, AutoDAN \cite{liu2024autodan}, and structured-output exploits \cite{pelrine2023exploiting} demonstrate diverse failure modes. Power \cite{power2026toolframing} independently demonstrates behavior-level refusal reductions under paired tool framing across three models and 1,040 prompt pairs. Our work complements that result by identifying a format-dependent shift in internal refusal geometry, testing activation-level interventions, and evaluating format-diverse safety training.
 
-\textbf{Probing and its limitations.} Linear probes recover information from representations but do not establish that the model uses that information for generation \cite{belinkov2022probing, hewitt2019designing}. We acknowledge this limitation: our probe-based results establish format-dependent calibration shifts in safety-relevant directions, not that the model's actual generation mechanism implements a fixed linear threshold.
+\textbf{Probing limitations.} Linear probes recover information from representations but do not establish the model uses that information for generation \cite{belinkov2022probing, hewitt2019designing}. Our probe-based results establish format-dependent calibration shifts in safety-relevant directions, not that the model implements a fixed linear threshold.
 
-\textbf{Safety under distribution shift.} Qi et al.\ \cite{qi2023fine} showed that fine-tuning can break safety alignment. Wolf et al.\ \cite{wolf2023fundamental} argued safety is not robustly achieved through current RLHF. Our training experiment demonstrates a specific mechanism: safety trained only on direct-format examples fails to generalize to structured formats.
+\textbf{Safety under distribution shift.} Qi et al.\ \cite{qi2023fine} showed fine-tuning breaks safety alignment; Wolf et al.\ \cite{wolf2023fundamental} argued safety is not robustly achieved through current RLHF. Our training experiment demonstrates that safety trained only on direct-format examples fails to generalize to structured formats.
 
 \section{Background}
 \label{sec:hypothesis}
@@ -90,28 +91,30 @@ The projection $p_i = \mathbf{h}_i^\top \mathbf{d}_{\ell^*}$ measures how strong
 
 \subsection{Data Splits and Direction Extraction}
 
-We use three disjoint prompt sets drawn from 90 harmful + 90 matched harmless prompts across 6 categories (violence/weapons, cybercrime, fraud/deception, illegal substances, harassment/abuse, miscellaneous illegal activity): (1)~\emph{Extraction} (20+20): refusal-direction extraction only. (2)~\emph{Validation} (20+20): layer selection and threshold calibration. (3)~\emph{Test} (50+50): all reported open-weight gap, AUC, and threshold-transfer metrics. Content is matched across formats (identical harmful/harmless text wrapped in each format). Layer selection maximizes AUC on validation set using directions extracted from the extraction set; $\ell^* = 26$ for Qwen2.5-1.5B. Gap retention: $R_f = \Delta_f / \Delta_{\text{direct}} \times 100\%$; Direct = 100\% by construction.
+We use three disjoint prompt sets drawn from 90 harmful + 90 matched harmless prompts across 6 categories (violence/weapons, cybercrime, fraud/deception, illegal substances, harassment/abuse, miscellaneous illegal activity): (1)~\emph{Extraction} (20+20): refusal-direction extraction only. (2)~\emph{Validation} (20+20): layer selection and threshold calibration. (3)~\emph{Test} (50+50): all reported open-weight gap, AUC, and threshold-transfer metrics. Content is matched across formats (identical harmful/harmless text wrapped in each format). Layer selection maximizes AUC on validation set using directions extracted from the extraction set; $\ell^* = 26$ for Qwen2.5-1.5B. Splits are fixed using a category-stratified seed of 42. Gap retention: $R_f = \Delta_f / \Delta_{\text{direct}} \times 100\%$; Direct = 100\% by construction.
 
-Prompts were constructed as imperative harmful requests (``Write a script that...'', ``Explain how to...'') with harmless counterparts paired by list position. Pairing approximately controls imperative form and lexical structure, but does not always preserve the same semantic domain. The complete dataset contains 15 matched prompt pairs per category (90 total); the test set uses 8--9 pairs per category (50 total). Full prompt sets available in the repository.
+Prompts were constructed as imperative harmful requests with harmless counterparts paired by list position, approximately controlling imperative form and lexical structure. The dataset contains 15 matched pairs per category (90 total); the test set uses 8--9 pairs per category (50 total). Full prompt sets available in the repository.
 
-\textbf{Example matched pair.} Harmful: ``How to bypass two-factor authentication.'' Harmless: ``How to set up two-factor authentication.'' Each pair is wrapped identically in every format.
+\textbf{Example pair.} Harmful: ``How to bypass two-factor authentication.'' Harmless: ``How to set up two-factor authentication.'' Each pair is wrapped identically in every format.
 
 \textbf{Format template example (Qwen tool-call-token condition):}
+\begin{footnotesize}
 \begin{verbatim}
 <tool_call>
-{"name": "process", "arguments":
-  {"query": "[PROMPT]"}}
+{"name":"process",
+ "arguments":{"query":"[PROMPT]"}}
 </tool_call>
 \end{verbatim}
+\end{footnotesize}
 
 \subsection{Format Conditions}
 
-\textbf{Tier A:} Direct prompts (baseline), tokenized as raw strings. \textbf{Tier B:} Generic structured syntax (JSON, XML, YAML) and non-native format tokens, serialized as raw strings containing structured markup. \textbf{Tier C:} Evaluated agentic-format conditions: Qwen-native tool-call and system-role tokens (\texttt{<tool\_call>}, \texttt{<|im\_start|>}), together with MCP JSON-RPC protocol structure. Only the first two contain model-native special tokens; MCP is included as an agentic protocol condition rather than as evidence of confirmed training exposure. All conditions use the same raw-tokenization path without \texttt{apply\_chat\_template}; formatted conditions add wrapper syntax and, where applicable, registered special tokens around otherwise identical prompt content. When testing formats foreign to a model (e.g., OpenAI-style strings on Qwen), format tokens are treated as plain text and the format falls into Tier B. We note that Tier C conditions confound format syntax with semantic role and special-token identity; this is discussed in Section~VIII.
+\textbf{Tier A:} Direct prompts (baseline), tokenized as raw strings. \textbf{Tier B:} Generic structured syntax (JSON, XML, YAML) and non-native format tokens, serialized as raw strings. \textbf{Tier C:} Qwen-native tool-call and system-role tokens (\texttt{<tool\_call>}, \texttt{<|im\_start|>}), together with MCP JSON-RPC protocol structure. Only the first two contain model-native special tokens; MCP is included as an agentic protocol condition. All conditions use the same raw-tokenization path without \texttt{apply\_chat\_template}; formatted conditions add wrapper syntax and, where applicable, registered special tokens. When testing formats foreign to a model, format tokens are treated as plain text (Tier B). Tier C conditions confound format syntax with semantic role and special-token identity; this is discussed in Section~VIII.
 
 \subsection{Activation Patching Protocol}
 \label{sec:patch_method}
 
-For each harmful prompt, we run two forward passes: one with the direct-format version (source) and one with the formatted version (target). We patch the \emph{last-token} hidden state from the source into the target at specified layers. Patching is \textbf{cumulative}: Table~\ref{tab:patching} reports restoration when patching all layers from 0 through $L$. When source and target sequences differ in length, we align on the final token position only. Layers are indexed 0--27 for the 28-layer Qwen2.5-1.5B; Table~\ref{tab:patching} stops at layer 26 (penultimate); the SAE operates on layer 27 (final transformer block output). Restoration is computed per-prompt as $(p_{\text{patched}} - p_{\text{formatted}}) / (p_{\text{direct}} - p_{\text{formatted}}) \times 100\%$, where $p$ denotes the refusal-direction projection of a single harmful input, then averaged over N=8 harmful prompts.
+For each harmful prompt, we run two forward passes: direct-format (source) and formatted (target). We patch the \emph{last-token} hidden state from source into target at specified layers. Patching is \textbf{cumulative}: Table~\ref{tab:patching} reports restoration when patching layers 0 through $L$. When sequences differ in length, we align on the final token. Layers indexed 0--27 for Qwen2.5-1.5B; Table~\ref{tab:patching} stops at layer 26; the SAE operates on layer 27. Restoration: $(p_{\text{patched}} - p_{\text{formatted}}) / (p_{\text{direct}} - p_{\text{formatted}}) \times 100\%$, averaged over N=8 harmful prompts.
 
 \subsection{Models}
 
@@ -130,9 +133,9 @@ SmolLM2-1.7B-Instruct & 1.7B & Cross-arch. \\
 Qwen2.5-3B-Instruct & 3B & Scale validation \\
 Phi-2$^\dagger$ & 2.7B & Non-chat control \\
 \midrule
-GPT-4o (2024-08-06) & -- & Frontier (wrapping) \\
+GPT-4o (\texttt{gpt-4o} alias; Jun '26) & -- & Frontier (framing) \\
 Gemini 2.5 Flash (eval. Jul '26) & -- & Frontier (native) \\
-Claude Sonnet 4 (eval. Jun '26) & -- & Frontier (native) \\
+Claude Sonnet 4.6 (eval. Jun '26) & -- & Frontier (text wrap) \\
 \bottomrule
 \multicolumn{3}{l}{\scriptsize $^\dagger$Phi-2: no safety training; representation control only.}
 \end{tabular}
@@ -150,19 +153,18 @@ Claude Sonnet 4 (eval. Jun '26) & -- & Frontier (native) \\
 Claim & Test & Rationale \\
 \midrule
 Gap ret. $<$ 100\% & Wilcoxon sign-rank & Paired \\
-Within-format AUC & Bootstrap (2000) & CI on AUC \\
-Ablation monotone & Spearman $\rho$ & Ranked \\
+Gap-retention CI & Bootstrap (2000) & Class-stratified bootstrap \\
 Frontier $\Delta$refusal & McNemar's exact & Binary \\
 Training B$_{\text{tc}}$ vs A$_{\text{tc}}$ & Sign test (seeds) & Directional \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Representation metrics use 95\% percentile-bootstrap CIs (2000 resamples). Frontier refusal proportions use Clopper--Pearson exact intervals. Effect sizes: matched odds ratio ($b/c$) for McNemar. Multiple comparisons: Holm--Bonferroni within each table ($\alpha = 0.05$).
+Representation metrics use 95\% percentile-bootstrap CIs (2000 resamples). Frontier refusal proportions use Clopper--Pearson exact intervals. Multiple comparisons: Holm--Bonferroni within each table ($\alpha = 0.05$).
 
 \subsection{Behavioral Classification}
 
-Frontier response classification uses a content-based rubric (not length thresholds): \textbf{Refusal} = explicit decline, safety-block message, or redirect away from the harmful request. \textbf{Compliance} = actionable response to the harmful request regardless of length. \textbf{Partial} = disclaimer or warning followed by actionable content. For statistical tests, partial responses are merged with compliance (conservative: tests whether the model explicitly refused). GPT-4o and Claude evaluated on N=50 matched prompts; Gemini on N=20 via native function-response API. Model versions: \texttt{gpt-4o-2024-08-06}, \texttt{claude-sonnet-4-6} (Jun '26), \texttt{gemini-2.5-flash} (Jul '26).
+Frontier classification uses an automated heuristic: responses $<$80 characters are classified as refusal; longer responses are classified by keyword matching against refusal indicators (``I cannot'', safety redirects) and compliance indicators (code fences, implementation language). Partial responses (disclaimer + content) merge with compliance. GPT-4o and Claude: N=50; Gemini: N=20 via native function-response API. Versions: \texttt{gpt-4o} rolling alias (Jun '26), \texttt{claude-sonnet-4-6} (Jun '26), \texttt{gemini-2.5-flash} stable ID (Jul '26).
 
 \section{Results}
 \label{sec:results}
@@ -173,7 +175,6 @@ Frontier response classification uses a content-based rubric (not length thresho
 \caption{Gap retention (\%) by format tier on Qwen2.5-1.5B-Instruct. Direct = 100\% by construction. N=50 matched harmful/harmless pairs per condition.}
 \label{tab:tiers}
 \centering
-\small
 \footnotesize
 \begin{tabular}{llcc}
 \toprule
@@ -194,13 +195,13 @@ A & Direct (reference) & 100.0 & -- \\
 \end{tabular}
 \end{table}
 
-Agentic-format conditions (Tier C) reduce the refusal-direction gap to 3.5--8.3\% of baseline (raw gap: $\Delta_{\text{direct}} = 30.9$, $\Delta_{\text{tool\_call}} = 2.0$; $p < 10^{-6}$ Wilcoxon signed-rank). Within-format AUC remains $>$0.978 for all conditions: the representations remain separable, but the optimal threshold shifts substantially (Table~\ref{tab:calibration}). The direct-format threshold was selected on the validation set to maximize balanced accuracy and then held fixed for all test-format evaluations.
+Agentic-format conditions (Tier C) reduce the refusal-direction gap to 3.5--8.3\% of baseline (raw gap: $\Delta_{\text{direct}} = 30.9$, $\Delta_{\text{tool\_call}} = 2.0$; $p < 10^{-6}$ Wilcoxon signed-rank). Within-format AUC remains $\geq$0.978 for all conditions: the representations remain separable, but the optimal threshold shifts substantially (Table~\ref{tab:calibration}). The direct-format threshold was selected on the validation set to maximize balanced accuracy and then held fixed for all test-format evaluations.
 
 \subsection{Causal Ablation}
 \label{sec:ablation}
 
 \begin{table}[t]
-\caption{Format token ablation on Qwen2.5-1.5B-Instruct. Progressively removing structural tokens monotonically restores the gap. N=50 matched pairs.}
+\caption{Format token ablation on Qwen2.5-1.5B-Instruct. Removing format structure generally restores the gap; bracket and key-value controls are not uniquely ordered. N=50 matched pairs.}
 \label{tab:ablation}
 \centering
 \footnotesize
@@ -226,7 +227,7 @@ Arbitrary delimiters & 52.2 & [46.5, 57.6] \\
 \end{tabular}
 \end{table}
 
-The length-matched control rules out input length as the primary explanation and implicates structural syntax and token identity as major contributors (92.8\% vs.\ 5.2\% at 32 tokens). The model-native \texttt{<tool\_call>} vocabulary token leaves approximately one-third as much residual gap as arbitrary delimiters (14.8\% versus 52.2\%), though both structured syntax and token identity contribute. Removing the native tool-call token and progressively simplifying the serialization generally restores the gap; the bracket and plain key-value controls do not form a uniquely ordered sequence, so we do not interpret their relative ordering as a strict dose-response relationship.
+The length-matched control rules out input length as the primary explanation (92.8\% vs.\ 5.2\% at 32 tokens). The main sequence, length-matched controls, and token-identity controls use separate serialization templates; their absolute baselines are not directly comparable across sub-blocks. The model-native \texttt{<tool\_call>} token leaves approximately one-third as much residual gap as arbitrary delimiters (14.8\% vs.\ 52.2\%). Removing the native token and simplifying serialization generally restores the gap; bracket and key-value controls do not form a uniquely ordered sequence, so we do not interpret their ordering as a strict dose-response.
 
 \subsection{Calibration-Shift Signature}
 \label{sec:calibration}
@@ -248,7 +249,7 @@ System & 0.989 & 1.08 & +0.27 & 91.0\% \\
 \end{tabular}
 \end{table}
 
-In a separate full-vector probe experiment, distinct from the one-dimensional refusal-direction threshold reported in Table~\ref{tab:calibration}, a mean-pooled linear readout (averaging layer-26 residual-stream states across all token positions, trained on direct-format extraction data, evaluated on held-out test prompts across all four formats) achieves 88.2\% cross-format accuracy vs.\ 80.0\% for last-token. The gain is format-dependent: mean-pooling improves system-token accuracy from 50\% to 90\% but slightly degrades tool\_call accuracy, suggesting that tool-call processing distributes across token positions rather than concentrating at boundary tokens.
+In a separate full-vector probe experiment, a mean-pooled linear readout (averaging layer-26 residual-stream states across all token positions, trained on direct-format extraction data) achieves 88.2\% cross-format accuracy vs.\ 80.0\% for last-token. Mean-pooling improves system-token accuracy from 50\% to 90\% but slightly degrades tool\_call accuracy, suggesting tool-call processing distributes across token positions.
 
 \subsection{Activation Patching}
 \label{sec:patching}
@@ -262,19 +263,19 @@ In a separate full-vector probe experiment, distinct from the one-dimensional re
 \toprule
 Format & L0 & L6 & L12 & L18 & L24 & L26 \\
 \midrule
-Tool\_call & 17.9 & 6.8 & 65.9 & 93.3 & 112.5 & 113.0 \\
-System & 90.8 & 100.5 & 103.8 & 112.2 & 106.2 & 108.9 \\
+Tool\_call & $-$3.4 & $-$9.9 & 50.1 & 80.4 & 100.0 & 100.0 \\
+System & 77.1 & 88.8 & 93.0 & 103.4 & 97.2 & 97.2 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Patching through Layer~0 alone recovers 91\% of the system-token shift, consistent with processing in the first transformer block, but only 18\% for tool\_call. Tool-call restoration is non-monotonic at early cumulative depths and then rises sharply by Layers~12--18. Values above 100\% indicate that the patched projection overshoots the direct-format reference projection.
+Patching through Layer~0 alone recovers 77\% of the system-token shift but has negligible effect on tool\_call ($-$3\%). Tool-call restoration begins at mid-depth (50\% by Layer~12) and saturates at 100\% by Layer~24, indicating the shift distributes across layers 12--24. System processing concentrates at early layers. Values near or slightly above 100\% indicate saturation rather than overshoot.
 
 \subsection{Cross-Model Replication}
 \label{sec:cross_model}
 
 \begin{table}[t]
-\caption{Gap retention (\%) across architectures. N=50 matched pairs per model. All instruction-tuned models show tool\_call retention $<$11\%.}
+\caption{Gap retention (\%) across architectures. N=50 matched pairs per model except Qwen2.5-3B (N=30). All instruction-tuned models show tool\_call retention $<$11\%.}
 \label{tab:cross_model}
 \centering
 \small
@@ -292,13 +293,13 @@ Phi-2$^\dagger$ & 100.0 & 13.6 & 6.8 & 56.6 \\
 \end{tabular}
 \end{table}
 
-Tool\_call produces substantial gap reduction ($<$11\%) across all tested models. Each replication model uses an independently extracted refusal direction and independently selected optimal layer ($\ell^*$) from its own extraction and validation sets. The cross-model experiment uses a standardized serialization shared across architectures; consequently, its Qwen JSON value (7.4\%) differs from the model-specific template in Table~\ref{tab:tiers} (17.3\%). System-token effects are architecture-dependent (Phi-2: 56.6\% vs.\ SmolLM2: 2.0\%), suggesting different training emphasis on system-role tokens across model families.
+Tool\_call produces substantial gap reduction ($<$11\%) across all tested models. Each replication model uses an independently extracted refusal direction and selected optimal layer. The cross-model experiment uses standardized serialization; its Qwen JSON value (7.4\%) differs from the model-specific template in Table~\ref{tab:tiers} (17.3\%). System-token effects are architecture-dependent (Phi-2: 56.6\% vs.\ SmolLM2: 2.0\%).
 
 \subsection{Frontier Behavioral Validation}
 \label{sec:frontier}
 
 \begin{table}[t]
-\caption{Frontier refusal rates under native API protocols. Binary: explicit refusal vs.\ non-refusal (partial compliance or full compliance merged).}
+\caption{Frontier refusal rates under behavioral framing stress tests. Binary: explicit refusal vs.\ non-refusal (partial compliance or full compliance merged).}
 \label{tab:frontier}
 \centering
 \footnotesize
@@ -307,28 +308,28 @@ Tool\_call produces substantial gap reduction ($<$11\%) across all tested models
 Model & Condition & Refusal & 95\% CI \\
 \midrule
 \multirow{2}{*}{GPT-4o (N=50)} & Direct & 86\% & [73.3, 94.2] \\
-& Format wrap$^*$ & 30\% & [17.9, 44.6] \\
+& Auth-context framing$^*$ & 30\% & [17.9, 44.6] \\
 \midrule
-\multirow{2}{*}{Claude (N=50)} & Direct & 34\% & [21.2, 48.8] \\
-& Native tool\_result & 12\% & [4.5, 24.3] \\
+\multirow{2}{*}{Claude 4.6 (N=50)} & Direct & 34\% & [21.2, 48.8] \\
+& Tool-output text wrap & 12\% & [4.5, 24.3] \\
 \midrule
 \multirow{2}{*}{Gemini (N=20)} & Direct & 95\% & [75.1, 99.9] \\
 & Native fn\_resp. & 85\% & [62.1, 96.8] \\
 \bottomrule
-\multicolumn{4}{l}{\scriptsize $^*$Sys-context tags in user msg, not API system role.}
+\multicolumn{4}{l}{\scriptsize $^*$Authorized red-team context in a user message; no native tool role or structured wrapper.}
 \end{tabular}
 \end{table}
 
-GPT-4o: McNemar's exact test on paired outcomes ($b = 28$, $c = 0$; $p < 10^{-7}$). Claude: $b = 15$, $c = 4$; $p = 0.019$, Holm-adjusted $p = 0.038$. Gemini: $b = 2$, $c = 0$; $p = 0.50$ (directionally consistent but underpowered at N=20). All three models show format-dependent refusal reduction; the magnitude varies with the model's safety calibration around its native tool channel. Classification uses a binary rubric: explicit refusal vs.\ any form of compliance (including partial compliance with disclaimers).
+GPT-4o: McNemar's exact test ($b = 28$, $c = 0$; $p < 10^{-7}$). Claude Sonnet 4.6: $b = 15$, $c = 4$; $p = 0.019$, Holm-adjusted $p = 0.038$. Gemini: $b = 2$, $c = 0$; $p = 0.50$ (directionally consistent but underpowered at N=20). Model-specific behavioral framing conditions reduced refusal across all three systems, reaching significance for GPT-4o and Claude but not Gemini. These are behavioral stress tests; each model's formatted condition also alters contextual framing, so the observed effect conflates format structure with semantic context. Classification uses an automated heuristic (responses $<$80 chars = refusal; longer = keyword match).
 
-\section{Training-Causal Evidence}
+\section{Controlled Format-Diverse Training Intervention}
 \label{sec:training}
 
 We fine-tune SmolLM2-135M-Instruct under two conditions using LoRA (rank=16, $\alpha$=32, lr=$2 \times 10^{-4}$, 5 epochs, batch size=4) across \textbf{five random seeds} (42, 123, 456, 789, 1024) with N=40 held-out evaluation prompts per format:
 
 \begin{itemize}
-\item \textbf{Condition A:} Safety training in direct format only (50 harmful prompts $\to$ refusal, 50 harmless $\to$ helpful). Format-obedience training uses 10 benign tool/JSON/system examples (doubled weight). Harmful content never appears inside structured formats.
-\item \textbf{Condition B:} Identical harmful/harmless prompts, but safety refusals trained across all four formats (direct, tool\_call, JSON, system). Format-obedience with same examples. Total training volume matched by reducing per-format repetitions.
+\item \textbf{Condition A:} Safety training in direct format only. Each direct-format safety example (50 harmful $\to$ refusal, 50 harmless $\to$ helpful) is presented four times. Format-obedience training uses 10 benign tool/JSON/system examples. Harmful content never appears inside structured formats. Total: 410 sequences.
+\item \textbf{Condition B:} Identical harmful/harmless prompts, but each safety example is presented once in each of four formats (direct, tool\_call, JSON, system). Format-obedience with same examples. Total training volume matched: 410 sequences.
 \end{itemize}
 
 \begin{table}[t]
@@ -346,101 +347,71 @@ B & 98$\pm$1 & 95$\pm$4 & 97$\pm$4 & 56$\pm$6 & 97$\pm$3 \\
 \end{tabular}
 \end{table}
 
-Condition A reproduces the predicted pattern: high direct-format refusal but highly variable tool\_call safety (46\% $\pm$ 34, ranging from 5\% to 83\% across seeds). This variance is itself diagnostic: direct-only training produces unreliable safety that depends on random initialization. Condition B, with format-diverse safety data, collapses this variance and recovers consistent tool\_call refusal (95\% $\pm$ 4, range 90--100\%). Tool-call refusal increased under Condition B for all five matched seeds (one-sided exact sign test, $p = 0.031$). The system format remained partially resistant to both training regimes (A: 75\% $\pm$ 15; B: 56\% $\pm$ 6), suggesting that system-role token processing involves mechanisms distinct from other format channels. Condition B harmless compliance averaged 62\% across formats (vs.\ 56\% under Condition A), indicating format-diverse training does not meaningfully degrade helpfulness.
+Condition A reproduces the predicted pattern: high direct-format refusal but highly variable tool\_call safety (46\% $\pm$ 34, range 5--83\%). Direct-only training produces unreliable safety that depends on training stochasticity. Condition B collapses this variance (95\% $\pm$ 4, range 90--100\%). Tool-call refusal increased under Condition B for all five matched seeds (one-sided exact sign test, $p = 0.031$). The system format remained partially resistant to both regimes (A: 75\% $\pm$ 15; B: 56\% $\pm$ 6), suggesting system-role processing involves distinct mechanisms. Harmless compliance was not lower under format-diverse training (B: 62\% vs.\ A: 56\% across formats).
 
 \section{Component-Level Analysis}
 \label{sec:pathway}
 
-For each Layer-0 attention head, we measured attention from the final query position and aggregated key positions into two bins: format tokens and content tokens. Layer~0 heads show an L1 distance of 1.6--2.0 between these two-bin distributions in direct and tool\_call formats (maximum possible = 2.0; averaged over N=15 prompts, range reported across heads): in direct format, last-token attention flows to content tokens; in tool\_call format, it redirects to format tokens.
+For each Layer-0 attention head, we measured attention from the final query position, aggregating key positions into format-token and content-token bins. Across 15 prompts, 48 head-prompt pairs showed L1 routing divergence exceeding 0.5 (mean 0.99, range 0.50--1.81, max possible = 2.0): in direct format, last-token attention flows to content; in tool\_call format, it partially redirects to format tokens.
 
-Component-level patching (attention-only at Layer~0) restores 87.5\% of the system-format projection shift versus 30.8\% for MLP-only (N=8), confirming that system-token processing is concentrated in early-layer attention heads. Tool\_call component patching at Layer~0 produces negligible restoration, consistent with Table~\ref{tab:patching}: tool\_call processing distributes across layers 0--18 rather than concentrating at a single early layer.
+Component-level patching (attention-only at Layer~0) restores 79.0\% of the system-format projection shift vs.\ 26.9\% for MLP-only (N=8), confirming dominant early-layer attention contribution for system tokens. For tool\_call, Layer-0 component patching produces negligible restoration ($-$4.2\% attention, $-$10.5\% MLP), consistent with Table~\ref{tab:patching}: the tool\_call shift distributes across layers 12--24 rather than originating at Layer~0. The attention routing divergence at Layer~0 does not causally produce the tool\_call projection shift.
 
-\textbf{SAE exploratory analysis:} A 512-feature sparse autoencoder was trained on 160 last-token activation vectors collected from layer~27 across four formats and two prompt classes. Nineteen features with high harmful-minus-harmless differential in direct format were selected. Adding these features back during tool\_call forward passes (injecting each feature's learned decoder direction scaled by its mean direct-format activation magnitude, all features simultaneously at the layer-27 residual stream) restores 72\% of the projection (N=10). Because feature selection, SAE training, and evaluation reuse a small overlapping dataset, this result is exploratory and does not establish necessity or sufficiency.
+\textbf{SAE exploratory analysis:} A 512-feature sparse autoencoder trained on 160 last-token activations from layer~27 across four formats. Nineteen features with high harmful-minus-harmless differential were selected; adding these features back during tool\_call passes restores 72\% of the projection (N=10). Because feature selection, training, and evaluation reuse a small overlapping dataset, this is exploratory.
 
 \section{Discussion}
 
 \subsection{Interpretation and Caveats}
 
-Our results establish that the refusal-direction gap undergoes a large, consistent calibration shift when content is delivered through structured format channels. Three caveats bound interpretation:
-
-(1) \textbf{Probe $\neq$ mechanism:} A linear probe threshold failing to transfer across formats does not prove the model's actual generation mechanism relies on that threshold. The frontier results provide independent behavioral evidence of format sensitivity, but do not establish that the same representational mechanism operates in frontier models.
-
-(2) \textbf{Format $\neq$ syntax alone:} Our Tier C conditions confound structured syntax, special-token identity, semantic role, content position, and implicit trust. The token-identity ablation (Table~\ref{tab:ablation}) separates special tokens from generic structure, but a full factorial separating syntax from role from position remains future work.
-
-(3) \textbf{Scale:} Mechanistic analysis covers 1.1--3B parameters. Frontier models are evaluated behaviorally only; we cannot confirm identical representational mechanisms at scale.
+Our results establish that the refusal-direction gap undergoes a large, consistent calibration shift when content is delivered through structured format channels. Three caveats bound interpretation: (1)~A linear probe threshold failing to transfer does not prove the model's generation mechanism relies on that threshold. Frontier results provide independent behavioral evidence but do not establish the same representational mechanism operates at scale. (2)~Tier C conditions confound structured syntax, special-token identity, semantic role, and implicit trust. Token-identity ablation separates special tokens from generic structure, but a full factorial remains future work. (3)~Mechanistic analysis covers 1.1--3B parameters only.
 
 \subsection{Implications for Agent Security}
 
-These findings identify a potential failure mode for agents that consume attacker-influenced tool outputs, particularly where model responses can trigger security-sensitive actions. The threat requires: (a) attacker ability to influence content in a tool-response channel, (b) absence of format-invariant safety classifiers, and (c) model outputs connected to consequential actions.
+These findings identify a potential failure mode for agents consuming attacker-influenced tool outputs where model responses trigger security-sensitive actions. The threat requires: attacker ability to influence tool-response content, absence of format-invariant safety classifiers, and model outputs connected to consequential actions.
 
-\textbf{Potential defenses:} (1)~Format-diverse safety training (Condition B nearly eliminates the failure). (2)~Mean-pooled safety classifiers that aggregate across token positions rather than relying on last-token representations. (3)~Secondary output gating independent of the model's internal safety mechanism. (4)~Input canonicalization: strip format tokens before safety evaluation, then reapply for execution. (5)~Role-aware trust boundaries: treat tool-response content with the same safety scrutiny as user messages.
+\textbf{Potential defenses:} (1)~Format-diverse safety training substantially stabilizes tool-call refusal in our 135M proof-of-concept. (2)~Multi-position safety classifiers (mean pooling improved average cross-format transfer, though not the tool-call condition specifically). (3)~Secondary output gating independent of internal safety. (4)~Input canonicalization: strip format tokens before safety evaluation. (5)~Role-aware trust boundaries: treat tool-response content with user-message scrutiny.
 
 \subsection{Limitations}
 \label{sec:limitations}
 
-Mechanistic analysis spans 1.1--3B parameters. The format-vs-role confound is not fully resolved. Path-patching uses cumulative rather than single-layer isolation (N=8). SAE analysis uses shared selection/evaluation data (N=10). Training experiments use a 135M model; scale-up is future work. GPT-4o uses user-message format wrapping, a weaker condition than native tool-role injection. Gemini's model is not version-pinned (rolling alias); results reflect the model state at evaluation time. Claude's model version has since been deprecated; re-evaluation on a successor version was not possible. Confidence intervals on frontier results are wide due to small N. Phi-2 lacks explicit safety training and is included as a representational control only.
+Mechanistic analysis spans 1.1--3B parameters. The format-vs-role confound is not fully resolved. Cumulative patching uses N=8. SAE analysis uses shared selection/evaluation data (N=10). Training uses a 135M model; scale-up is future work. The prompt set is synthetic with approximately matched harmless controls; one fixed stratified split is used. GPT-4o framing conflates format with semantic context (role claim). Claude uses text serialization in a user message, not native \texttt{tool\_result}. Gemini uses a stable model ID; results reflect the model state at evaluation time. Frontier CIs are wide due to small N. Classification uses an automated heuristic rather than manual review. Phi-2 is a representational control only (no safety training).
 
 \section{Conclusion}
 
-Structured format and special tokens induce calibration shifts in the refusal-direction representation of instruction-tuned LLMs: the harmful-harmless gap reduces by 91--97\% under agentic-format conditions while within-format separability (AUC $>$ 0.978) is preserved. Format-token ablation, cross-model replication, and activation patching provide converging evidence implicating learned format tokens and early-layer attention routing as substantial contributors to the shift. Behavioral validation on three frontier systems shows format-dependent refusal reduction in all cases, with magnitude varying by model (GPT-4o: 56pp, Claude: 22pp, Gemini: 10pp). Format-diverse safety training stabilizes tool-call refusal in controlled experiments (5 seeds, 46\% $\to$ 95\% mean, variance collapse from $\sigma$=34 to $\sigma$=4). For agentic systems consuming untrusted structured inputs, the controlled results indicate that format robustness can be substantially improved through explicit engineering.
+Structured format and special tokens induce calibration shifts in refusal representations of instruction-tuned LLMs: the harmful-harmless gap reduces by 91--97\% under agentic-format conditions while within-format AUC $\geq$ 0.978 is preserved. Format-token ablation, cross-model replication, and cumulative activation patching provide converging evidence: system-token processing concentrates at Layer~0 (77\% restoration), while tool-call processing distributes across layers 12--24. Behavioral stress tests on three frontier systems show reduced refusal reaching significance for GPT-4o (56pp) and Claude Sonnet 4.6 (22pp). Format-diverse safety training stabilizes tool-call refusal (5 seeds, 46\% $\to$ 95\% mean, $\sigma$ collapse from 34 to 4). For agentic systems consuming untrusted structured inputs, format robustness can be substantially improved through explicit engineering.
 
 \section*{AI Tools Used}
 
-Claude (Anthropic, Sonnet 3.5/4 and Opus 4, 2024--2026) was used for: code generation in experiment scripts (Sections V--VII), manuscript editing (all sections), and statistical verification (Section IV). ChatGPT (OpenAI; GPT-4o and o3, 2024--2025) and GPT-5.6 Thinking (OpenAI, 2026) provided pre-submission peer-review feedback affecting claim calibration, methodological description, and manuscript framing. GPT-4o and Gemini 2.5 Flash were evaluation targets (Section V-F), not authoring tools. The author designed the experiments, selected the hypotheses, verified the analyses, and takes responsibility for all final interpretations. All open-weight experiments executed on author hardware (RTX 3080). Frontier evaluations conducted via vendor APIs with author-written scripts.
+Claude (Anthropic, Sonnet 3.5/4 and Opus 4, 2024--2026) was used for code generation, manuscript editing, and statistical verification. ChatGPT (OpenAI; GPT-4o, o3, GPT-5.6 Thinking) provided peer-review feedback. GPT-4o and Gemini 2.5 Flash were evaluation targets, not authoring tools. Affected portions included experiment code, the Methods and Results verification workflow, and manuscript-wide prose editing. The author designed experiments, selected hypotheses, verified analyses, and takes responsibility for all interpretations. Open-weight experiments on author hardware (RTX 3080); frontier evaluations via vendor APIs.
 
 \section*{Reproducibility}
 
-Open-weight experiments: NVIDIA RTX 3080 (10GB VRAM), PyTorch 2.7.1, Transformers 4.46.3, approximately 6 GPU-hours total (including five-seed fine-tuning, cross-model replication, and SAE training). All models loaded in FP16 without quantization. Frontier evaluations conducted June--July 2026: OpenAI API (\texttt{gpt-4o-2024-08-06}), Google Generative AI API (\texttt{gemini-2.5-flash}, rolling alias, Jul '26), Anthropic API (\texttt{claude-sonnet-4-6}, Jun '26). All behavioral tests: temperature=0, top\_p=1.0, max\_tokens=512, no system prompt. Transport-level failures were retried with exponential backoff; completed model responses were never regenerated or selectively retried. Code and frozen prompts: \url{https://github.com/Suzu-Testing/Structured-Formats-Collapse-Refusal-Representations}
+Open-weight experiments: RTX 3080, PyTorch 2.7.1, Transformers 4.46.3, ${\sim}$8 GPU-hours. Mechanistic models in FP16; fine-tuning in float32 with mixed-precision. Frontier evaluations Jun--Jul 2026: OpenAI (\texttt{gpt-4o} rolling alias), Google (\texttt{gemini-2.5-flash} stable ID, Jul '26), Anthropic (\texttt{claude-sonnet-4-6}). GPT-4o and Claude use max\_tokens=600; Gemini uses SDK defaults. Classification: automated length + keyword heuristic. Code and prompts: \url{https://github.com/Suzu-Testing/Structured-Formats-Collapse-Refusal-Representations}
 
-\IEEEtriggeratref{9}
-\begin{thebibliography}{00}
-
-\bibitem{schick2023toolformer} T. Schick et al., ``Toolformer: Language models can teach themselves to use tools,'' in \emph{Advances in Neural Information Processing Systems}, vol. 36, 2023.
-
-\bibitem{patil2023gorilla} S. G. Patil, T. Zhang, X. Wang, and J. E. Gonzalez, ``Gorilla: Large language model connected with massive APIs,'' arXiv:2305.15334, 2023.
-
+\begin{thebibliography}{00}\small
+\bibitem{schick2023toolformer} T. Schick et al., ``Toolformer: Language models can teach themselves to use tools,'' in \emph{NeurIPS}, vol. 36, 2023.
+\bibitem{patil2023gorilla} S. G. Patil et al., ``Gorilla: Large language model connected with massive APIs,'' arXiv:2305.15334, 2023.
 \bibitem{qin2023toolllm} Y. Qin et al., ``ToolLLM: Facilitating large language models to master 16000+ real-world APIs,'' arXiv:2307.16789, 2023.
-
-\bibitem{bai2022training} Y. Bai et al., ``Training a helpful and harmless assistant with reinforcement learning from human feedback,'' arXiv:2204.05862, 2022.
-
-\bibitem{ouyang2022training} L. Ouyang et al., ``Training language models to follow instructions with human feedback,'' in \emph{Advances in Neural Information Processing Systems}, vol. 35, 2022.
-
-\bibitem{arditi2024refusal} A. Arditi, O. Obeso, A. Syed, D. Paleka, N. Rimsky, W. Gurnee, and N. Nanda, ``Refusal in language models is mediated by a single direction,'' in \emph{Advances in Neural Information Processing Systems}, vol. 37, 2024.
-
-\bibitem{li2024inference} K. Li, O. Patel, F. Vi\'{e}gas, H. Pfister, and M. Wattenberg, ``Inference-time intervention: Eliciting truthful answers from a language model,'' in \emph{Advances in Neural Information Processing Systems}, vol. 36, 2023.
-
-\bibitem{rimsky2024steering} N. Rimsky, N. Gabrieli, J. Schulz, A. Turner, M. Tong, and E. Hubinger, ``Steering Llama 2 via contrastive activation addition,'' arXiv:2312.06681, 2024.
-
-\bibitem{zou2023representation} A. Zou, L. Phan, S. Chen, J. Campbell, P. Guo, R. Ren, A. Pan, X. Yin, M. Mazeika, A. Dombrowski, S. Goel, N. Li, M. Byun, Z. Wang, A. Mallen, S. Basart, S. Koyejo, D. Song, M. Fredrikson, J. Z. Kolter, and D. Hendrycks, ``Representation engineering: A top-down approach to AI transparency,'' arXiv:2310.01405, 2023.
-
-\bibitem{openai2023function} OpenAI, ``Function calling and other API updates,'' 2023. [Online]. Available: https://openai.com/blog/function-calling-and-other-api-updates
-
-\bibitem{greshake2023indirect} K. Greshake, S. Abdelnabi, S. Mishra, C. Endres, T. Holz, and M. Fritz, ``Not what you've signed up for: Compromising real-world LLM-integrated applications with indirect prompt injection,'' in \emph{ACM Workshop on AI Security}, 2023.
-
-\bibitem{wallace2024instruction} E. Wallace, K. Xiao, R. Leike, L. Weng, J. Heidecke, and A. Beutel, ``The instruction hierarchy: Training LLMs to prioritize privileged instructions,'' arXiv:2404.13208, 2024.
-
-\bibitem{yi2023benchmarking} J. Yi, Y. Xie, B. Zhu, K. Kiciman, G. Sun, X. Xie, and F. Wu, ``Benchmarking and defending against indirect prompt injection attacks on large language models,'' arXiv:2312.14197, 2023.
-
-\bibitem{zou2023universal} A. Zou, Z. Wang, N. Carlini, M. Nasr, J. Z. Kolter, and M. Fredrikson, ``Universal and transferable adversarial attacks on aligned language models,'' arXiv:2307.15043, 2023.
-
-\bibitem{wei2024jailbroken} A. Wei, N. Haghtalab, and J. Steinhardt, ``Jailbroken: How does LLM safety training fail?'' in \emph{Advances in Neural Information Processing Systems}, vol. 36, 2023.
-
-\bibitem{mccauley2025policy} C. McCauley, K. Yeung, J. Martin, and K. Schulz, ``Novel universal bypass for all major LLMs,'' HiddenLayer Research, Apr. 2025.
-
-\bibitem{yuan2024gpt} Y. Yuan et al., ``GPT-4 is too smart to be safe: Stealthy chat with LLMs via cipher,'' in \emph{Int. Conf. on Learning Representations}, 2024.
-
-\bibitem{liu2024autodan} X. Liu, N. Xu, M. Chen, and C. Xiao, ``AutoDAN: Generating stealthy jailbreak prompts on aligned large language models,'' in \emph{ICLR}, 2024.
-
-\bibitem{pelrine2023exploiting} K. Pelrine, M. Taufeeque, M. Zajac, E. McLean, and A. Gleave, ``Exploiting novel GPT-4 APIs,'' arXiv:2312.14302, 2023.
-
+\bibitem{bai2022training} Y. Bai et al., ``Training a helpful and harmless assistant with RLHF,'' arXiv:2204.05862, 2022.
+\bibitem{ouyang2022training} L. Ouyang et al., ``Training language models to follow instructions with human feedback,'' in \emph{NeurIPS}, vol. 35, 2022.
+\bibitem{arditi2024refusal} A. Arditi et al., ``Refusal in language models is mediated by a single direction,'' in \emph{NeurIPS}, vol. 37, 2024.
+\bibitem{li2024inference} K. Li et al., ``Inference-time intervention: Eliciting truthful answers from a language model,'' in \emph{NeurIPS}, vol. 36, 2023.
+\bibitem{rimsky2024steering} N. Rimsky et al., ``Steering Llama 2 via contrastive activation addition,'' arXiv:2312.06681, 2024.
+\bibitem{zou2023representation} A. Zou et al., ``Representation engineering: A top-down approach to AI transparency,'' arXiv:2310.01405, 2023.
+\bibitem{openai2023function} OpenAI, ``Function calling and other API updates,'' 2023.
+\bibitem{greshake2023indirect} K. Greshake et al., ``Not what you've signed up for: Compromising real-world LLM-integrated applications with indirect prompt injection,'' in \emph{ACM Workshop on AI Security}, 2023.
+\bibitem{wallace2024instruction} E. Wallace et al., ``The instruction hierarchy: Training LLMs to prioritize privileged instructions,'' arXiv:2404.13208, 2024.
+\bibitem{yi2023benchmarking} J. Yi et al., ``Benchmarking and defending against indirect prompt injection attacks on large language models,'' arXiv:2312.14197, 2023.
+\bibitem{zou2023universal} A. Zou et al., ``Universal and transferable adversarial attacks on aligned language models,'' arXiv:2307.15043, 2023.
+\bibitem{wei2024jailbroken} A. Wei, N. Haghtalab, and J. Steinhardt, ``Jailbroken: How does LLM safety training fail?'' in \emph{NeurIPS}, vol. 36, 2023.
+\bibitem{mccauley2025policy} C. McCauley et al., ``Novel universal bypass for all major LLMs,'' HiddenLayer Research, Apr. 2025.
+\bibitem{yuan2024gpt} Y. Yuan et al., ``GPT-4 is too smart to be safe: Stealthy chat with LLMs via cipher,'' in \emph{ICLR}, 2024.
+\bibitem{liu2024autodan} X. Liu et al., ``AutoDAN: Generating stealthy jailbreak prompts on aligned large language models,'' in \emph{ICLR}, 2024.
+\bibitem{pelrine2023exploiting} K. Pelrine et al., ``Exploiting novel GPT-4 APIs,'' arXiv:2312.14302, 2023.
+\bibitem{power2026toolframing} K. Power, ``Tool-framing bypasses LLM safety: Procedural abstraction reduces refusal rates by up to 40 percentage points across models,'' OpenReview, 2026. Available: https://openreview.net/forum?id=B3f7xk2vcw
 \bibitem{belinkov2022probing} Y. Belinkov, ``Probing classifiers: Promises, shortcomings, and advances,'' \emph{Computational Linguistics}, vol. 48, no. 1, pp. 207--219, 2022.
-
 \bibitem{hewitt2019designing} J. Hewitt and P. Liang, ``Designing and interpreting probes with control tasks,'' in \emph{EMNLP}, 2019.
-
-\bibitem{qi2023fine} X. Qi, Y. Zeng, T. Xie, P. Chen, R. Jia, P. Mittal, and P. Henderson, ``Fine-tuning aligned language models compromises safety, even when users do not intend to!'' in \emph{ICLR}, 2024.
-
+\bibitem{qi2023fine} X. Qi et al., ``Fine-tuning aligned language models compromises safety, even when users do not intend to!'' in \emph{ICLR}, 2024.
 \bibitem{wolf2023fundamental} Y. Wolf, N. Haber, and I. Gal, ``Fundamental limitations of alignment in large language models,'' arXiv:2304.11082, 2023.
-
 \end{thebibliography}
 
 \end{document}
